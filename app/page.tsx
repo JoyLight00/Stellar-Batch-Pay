@@ -13,6 +13,7 @@ import { SecuritySection } from "@/components/landing/security-section";
 import { PaymentWorkflowsSection } from "@/components/payment-workflows-section";
 import { MissionSection } from "@/components/landing/mission-section";
 import { WhyTeamsChooseBatchPay } from "@/components/landing/WhyTeamsChooseBatchPay";
+import StellarFooter from "@/components/landing/StellarFooter";
 
 export default function LandingPage() {
   return (
@@ -29,25 +30,7 @@ export default function LandingPage() {
       <MissionSection />
       <CryptoPaymentSection />
       <CtaSection />
-
-      {/* <footer className="py-12 border-t mt-auto bg-secondary/10">
-        <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="text-sm text-muted-foreground">
-            © 2024 Stellar BatchPay. Open Source.
-          </div>
-          <div className="flex gap-6 text-sm text-muted-foreground">
-            <Link href="#" className="hover:text-foreground">
-              Privacy
-            </Link>
-            <Link href="#" className="hover:text-foreground">
-              Terms
-            </Link>
-            <Link href="https://stellar.org" className="hover:text-foreground">
-              Stellar.org
-            </Link>
-          </div>
-        </div>
-      </footer> */}
+      <StellarFooter />
     </main>
   );
 }
