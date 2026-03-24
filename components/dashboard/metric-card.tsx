@@ -30,12 +30,12 @@ export function MetricCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
     >
-      <Card className="border-[#1F2937] bg-[#121827] shadow-lg hover:shadow-xl transition-shadow">
+      <Card className="border border-slate-700/50 bg-slate-900/50 shadow-lg hover:shadow-xl hover:border-slate-600/70 transition-all duration-300">
         <CardContent className="p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between mb-6">
             <div
               className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-lg",
+                "flex h-12 w-12 items-center justify-center rounded-lg",
                 iconBg
               )}
             >
@@ -49,16 +49,16 @@ export function MetricCard({
             </div>
             <span
               className={cn(
-                "text-xs font-medium",
+                "text-xs font-semibold",
                 isLiveIndicator ? "text-purple-400" : "text-teal-400"
               )}
             >
               {change}
             </span>
           </div>
-          <div className="mt-4 space-y-1">
-            <p className="text-sm font-medium text-gray-400">{title}</p>
-            <p className="text-2xl font-bold text-white">{value}</p>
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-slate-400">{title}</p>
+            <p className="text-3xl font-bold text-white">{value}</p>
           </div>
         </CardContent>
       </Card>
