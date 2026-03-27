@@ -65,7 +65,7 @@ export function RecentBatchesTable({
           </Button>
         </div>
         
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto overflow-y-hidden">
           <table className="w-full text-left">
             <thead>
               <tr className="text-xs font-medium text-gray-500 border-b border-[#1F2937]">
@@ -82,17 +82,45 @@ export function RecentBatchesTable({
                   key={batch.id} 
                   className="border-b border-[#1F2937]/50 hover:bg-white/[0.02] transition-colors cursor-default"
                 >
-                  <td className="py-5 font-medium text-gray-300">{batch.id}</td>
+                  <td className="py-5 font-medium text-gray-300 whitespace-nowrap">{batch.id}</td>
                   <td className="py-5 text-gray-400">{batch.recipients}</td>
                   <td className="py-5 font-bold text-white text-base">{batch.amount}</td>
                   <td className="py-5">
                     <StatusBadge status={batch.status} />
                   </td>
-                  <td className="py-5 text-gray-500">{batch.timestamp}</td>
+                  <td className="py-5 text-gray-500 whitespace-nowrap">{batch.timestamp}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile View - List */}
+        <div className="flex flex-col gap-4 md:hidden">
+          {batches.map((batch) => (
+            <div 
+              key={batch.id} 
+              className="flex flex-col p-4 rounded-xl border border-[#1F2937] bg-[#1F293780]/20 gap-3"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-gray-300">{batch.id}</span>
+                <StatusBadge status={batch.status} />
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex flex-col">
+                  <span className="text-gray-500 text-xs uppercase tracking-wider">Recipients</span>
+                  <span className="text-white font-medium">{batch.recipients}</span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-gray-500 text-xs uppercase tracking-wider">Amount</span>
+                  <span className="text-white font-bold">{batch.amount}</span>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 border-t border-[#1F2937] pt-2">
+                Created {batch.timestamp}
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

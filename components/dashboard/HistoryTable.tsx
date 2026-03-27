@@ -82,64 +82,117 @@ export function HistoryTable({
   className,
 }: HistoryTableProps) {
   return (
-    <div className={cn("overflow-x-auto", className)}>
-      <table className="w-full text-left min-w-[800px]">
-        <thead>
-          <tr className="text-xs font-semibold text-gray-500 border-b border-[#1F2937]">
-            <th className="pb-4 px-4 whitespace-nowrap">
-               <div className="flex items-center gap-1 cursor-pointer hover:text-gray-300">
-                 Batch ID <ChevronDown className="h-3 w-3" />
-               </div>
-            </th>
-            <th className="pb-4 px-4 whitespace-nowrap">
-               <div className="flex items-center gap-1 cursor-pointer hover:text-gray-300">
-                 Date Submitted <ChevronDown className="h-3 w-3" />
-               </div>
-            </th>
-            <th className="pb-4 px-4 whitespace-nowrap">Network</th>
-            <th className="pb-4 px-4 whitespace-nowrap">Recipients</th>
-            <th className="pb-4 px-4 whitespace-nowrap">
-               <div className="flex items-center gap-1 cursor-pointer hover:text-gray-300">
-                 Total Amount <ChevronDown className="h-3 w-3" />
-               </div>
-            </th>
-            <th className="pb-4 px-4 whitespace-nowrap">Transactions</th>
-            <th className="pb-4 px-4 whitespace-nowrap">Status</th>
-            <th className="pb-4 px-4 text-right whitespace-nowrap">Action</th>
-          </tr>
-        </thead>
-        <tbody className="text-sm">
-          {data.map((batch) => (
-            <tr key={batch.id} className="border-b border-[#1F2937]/50 hover:bg-white/[0.02] transition-colors">
-              <td className="py-5 px-4 font-medium text-gray-300">{batch.id}</td>
-              <td className="py-5 px-4 text-gray-400">{batch.date}</td>
-              <td className="py-5 px-4">
-                <Badge variant="outline" className={cn(
-                  "px-2 py-0.5 rounded-full text-[10px] items-center gap-1.5 border-none",
-                  batch.network === "Mainnet" ? "bg-blue-500/10 text-blue-400" : "bg-purple-500/10 text-purple-400"
-                )}>
-                  <div className={cn(
-                    "h-1.5 w-1.5 rounded-full",
-                    batch.network === "Mainnet" ? "bg-blue-400" : "bg-purple-400"
-                  )}></div>
-                  {batch.network}
-                </Badge>
-              </td>
-              <td className="py-5 px-4 text-gray-400">{batch.recipients}</td>
-              <td className="py-5 px-4 font-bold text-white">{batch.amount}</td>
-              <td className="py-5 px-4 text-gray-400 font-mono">{batch.transactions}</td>
-              <td className="py-5 px-4">
-                <HistoryStatusBadge status={batch.status} />
-              </td>
-              <td className="py-5 px-4 text-right">
-                <Button variant="link" className="text-[#00D98B] hover:text-[#00D98B]/80 p-0 h-auto font-medium">
-                  View Details
-                </Button>
-              </td>
+    <div className={className}>
+      {/* Desktop View - Table */}
+      <div className="hidden md:block overflow-x-auto overflow-y-hidden">
+        <table className="w-full text-left min-w-[1000px]">
+          <thead>
+            <tr className="text-xs font-semibold text-gray-500 border-b border-[#1F2937]">
+              <th className="pb-4 px-4 whitespace-nowrap">
+                <div className="flex items-center gap-1 cursor-pointer hover:text-gray-300">
+                  Batch ID <ChevronDown className="h-3 w-3" />
+                </div>
+              </th>
+              <th className="pb-4 px-4 whitespace-nowrap">
+                <div className="flex items-center gap-1 cursor-pointer hover:text-gray-300">
+                  Date Submitted <ChevronDown className="h-3 w-3" />
+                </div>
+              </th>
+              <th className="pb-4 px-4 whitespace-nowrap">Network</th>
+              <th className="pb-4 px-4 whitespace-nowrap">Recipients</th>
+              <th className="pb-4 px-4 whitespace-nowrap">
+                <div className="flex items-center gap-1 cursor-pointer hover:text-gray-300">
+                  Total Amount <ChevronDown className="h-3 w-3" />
+                </div>
+              </th>
+              <th className="pb-4 px-4 whitespace-nowrap">Transactions</th>
+              <th className="pb-4 px-4 whitespace-nowrap">Status</th>
+              <th className="pb-4 px-4 text-right whitespace-nowrap">Action</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="text-sm">
+            {data.map((batch) => (
+              <tr key={batch.id} className="border-b border-[#1F2937]/50 hover:bg-white/[0.02] transition-colors">
+                <td className="py-5 px-4 font-medium text-gray-300 whitespace-nowrap">{batch.id}</td>
+                <td className="py-5 px-4 text-gray-400 whitespace-nowrap">{batch.date}</td>
+                <td className="py-5 px-4">
+                  <Badge variant="outline" className={cn(
+                    "px-2 py-0.5 rounded-full text-[10px] items-center gap-1.5 border-none",
+                    batch.network === "Mainnet" ? "bg-blue-500/10 text-blue-400" : "bg-purple-500/10 text-purple-400"
+                  )}>
+                    <div className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      batch.network === "Mainnet" ? "bg-blue-400" : "bg-purple-400"
+                    )}></div>
+                    {batch.network}
+                  </Badge>
+                </td>
+                <td className="py-5 px-4 text-gray-400">{batch.recipients}</td>
+                <td className="py-5 px-4 font-bold text-white whitespace-nowrap">{batch.amount}</td>
+                <td className="py-5 px-4 text-gray-400 font-mono whitespace-nowrap">{batch.transactions}</td>
+                <td className="py-5 px-4">
+                  <HistoryStatusBadge status={batch.status} />
+                </td>
+                <td className="py-5 px-4 text-right">
+                  <Button variant="link" className="text-[#00D98B] hover:text-[#00D98B]/80 p-0 h-auto font-medium">
+                    View Details
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile View - List */}
+      <div className="flex flex-col gap-4 md:hidden">
+        {data.map((batch) => (
+          <div 
+            key={batch.id} 
+            className="flex flex-col p-5 rounded-2xl border border-[#1F2937] bg-[#121827] gap-4"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-gray-200">{batch.id}</span>
+              <HistoryStatusBadge status={batch.status} />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold">Amount</span>
+                <span className="text-white font-bold">{batch.amount}</span>
+              </div>
+              <div className="flex flex-col gap-1 items-end">
+                <span className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold">Recipients</span>
+                <span className="text-white">{batch.recipients}</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold">Network</span>
+                <Badge variant="outline" className={cn(
+                    "px-2 py-0.5 rounded-full text-[10px] items-center gap-1.5 border-none w-fit",
+                    batch.network === "Mainnet" ? "bg-blue-500/10 text-blue-400" : "bg-purple-500/10 text-purple-400"
+                  )}>
+                    <div className={cn(
+                      "h-1 w-1 rounded-full",
+                      batch.network === "Mainnet" ? "bg-blue-400" : "bg-purple-400"
+                    )}></div>
+                    {batch.network}
+                  </Badge>
+              </div>
+              <div className="flex flex-col gap-1 items-end">
+                <span className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold">Progress</span>
+                <span className="text-gray-400 font-mono text-xs">{batch.transactions}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-[#1F2937]">
+              <span className="text-xs text-gray-500">{batch.date}</span>
+              <Button variant="link" className="text-[#00D98B] hover:text-[#00D98B]/80 p-0 h-auto text-xs font-semibold">
+                View Details <ExternalLink className="ml-1 h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

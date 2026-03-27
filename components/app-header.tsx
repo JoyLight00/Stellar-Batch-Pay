@@ -37,30 +37,36 @@ export function AppHeader() {
             />
           </div>
         ) : (
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
+          <Breadcrumb className="max-w-[200px] sm:max-w-none">
+            <BreadcrumbList className="flex-nowrap overflow-hidden">
+              <BreadcrumbItem className="hidden sm:inline-flex">
                 <BreadcrumbLink href="/dashboard" className="text-gray-400 hover:text-white transition-colors">
                   Dashboard
                 </BreadcrumbLink>
               </BreadcrumbItem>
+              <BreadcrumbSeparator className="hidden sm:inline-flex text-gray-600" />
               {pathsegments.slice(1).map((segment, index) => {
                 const href = `/${pathsegments.slice(0, index + 2).join("/")}`
                 const isLast = index === pathsegments.length - 2
                 const title = segment.charAt(0).toUpperCase() + segment.slice(1).replace("-", " ")
 
+                // On mobile, only show the last segment if it's deep
+                const showOnMobile = isLast || pathsegments.length <= 2
+
                 return (
                   <React.Fragment key={href}>
-                    <BreadcrumbSeparator className="text-gray-600" />
-                    <BreadcrumbItem>
+                    <BreadcrumbItem className={cn(!showOnMobile && "hidden sm:inline-flex")}>
                       {isLast ? (
-                        <BreadcrumbPage className="text-white font-medium">{title}</BreadcrumbPage>
+                        <BreadcrumbPage className="text-white font-medium truncate max-w-[120px] sm:max-w-none">
+                          {title}
+                        </BreadcrumbPage>
                       ) : (
-                        <BreadcrumbLink href={href} className="text-gray-400 hover:text-white transition-colors">
+                        <BreadcrumbLink href={href} className="text-gray-400 hover:text-white transition-colors truncate max-w-[100px] sm:max-w-none">
                           {title}
                         </BreadcrumbLink>
                       )}
                     </BreadcrumbItem>
+                    {!isLast && <BreadcrumbSeparator className={cn("text-gray-600", !showOnMobile && "hidden sm:inline-flex")} />}
                   </React.Fragment>
                 )
               })}
