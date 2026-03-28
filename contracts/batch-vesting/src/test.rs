@@ -19,6 +19,22 @@ fn create_token_contract<'a>(
     )
 }
 
+fn over_limit_recipients(env: &Env) -> Vec<Address> {
+    let mut recipients = Vec::new(env);
+    for _ in 0..(MAX_BATCH_SIZE + 1) {
+        recipients.push_back(Address::generate(env));
+    }
+    recipients
+}
+
+fn matching_amounts(env: &Env, len: u32, amount: i128) -> Vec<i128> {
+    let mut amounts = Vec::new(env);
+    for _ in 0..len {
+        amounts.push_back(amount);
+    }
+    amounts
+}
+
 #[test]
 fn test_version() {
     let env = Env::default();
@@ -322,6 +338,33 @@ fn test_deposit_unauthorized() {
 
     // This should fail because sender hasn't authorized the call
     client.deposit(&sender, &token, &recipients, &amounts, &unlock_time);
+}
+
+#[test]
+#[should_panic(expected = "Batch size exceeds MAX_BATCH_SIZE")]
+fn test_deposit_rejects_oversized_batch() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let sender = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let (token, token_admin_client) = create_token_contract(&env, &token_admin);
+
+    let recipients = over_limit_recipients(&env);
+    let amounts = matching_amounts(&env, recipients.len(), 1);
+    let total_amount = i128::from(recipients.len());
+    let unlock_time = 1000;
+
+    token_admin_client.mint(&sender, &total_amount);
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = 0;
+    });
+
+    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
 }
 
 #[test]
@@ -819,4 +862,37 @@ fn test_batch_revoke_partial_recipients() {
 
     client.claim(&recipient3, &token.address);
     assert_eq!(token.balance(&recipient3), 300);
+}
+
+#[test]
+#[should_panic(expected = "Batch size exceeds MAX_BATCH_SIZE")]
+fn test_batch_revoke_rejects_oversized_batch() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let sender = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let (token, token_admin_client) = create_token_contract(&env, &token_admin);
+
+    let recipients = over_limit_recipients(&env);
+    let amounts = matching_amounts(&env, recipients.len(), 1);
+    let total_amount = i128::from(recipients.len());
+    let unlock_time = 1000;
+
+    token_admin_client.mint(&sender, &total_amount);
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = 0;
+    });
+
+    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = 500;
+    });
+
+    client.batch_revoke(&sender, &recipients, &token.address, &unlock_time);
 }

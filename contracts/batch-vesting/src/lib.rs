@@ -2,6 +2,8 @@
 
 use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, String, Symbol, Vec};
 
+const MAX_BATCH_SIZE: u32 = 100;
+
 #[contract]
 pub struct BatchVestingContract;
 
@@ -22,6 +24,12 @@ pub enum DataKey {
 }
 
 impl BatchVestingContract {
+    fn panic_if_batch_too_large(batch_len: u32) {
+        if batch_len > MAX_BATCH_SIZE {
+            panic!("Batch size exceeds MAX_BATCH_SIZE");
+        }
+    }
+
     fn get_admin(env: &Env) -> Option<Address> {
         env.storage().persistent().get(&DataKey::Admin)
     }
@@ -120,6 +128,8 @@ impl BatchVestingContract {
         if recipients.len() != amounts.len() {
             panic!("Recipients and amounts length mismatch");
         }
+
+        Self::panic_if_batch_too_large(recipients.len());
 
         if unlock_time <= env.ledger().timestamp() {
             panic!("Unlock time must be in the future");
@@ -244,6 +254,7 @@ impl BatchVestingContract {
     ) {
         Self::panic_if_paused(&env);
         caller.require_auth();
+        Self::panic_if_batch_too_large(recipients.len());
 
         let current_time = env.ledger().timestamp();
 

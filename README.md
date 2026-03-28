@@ -81,6 +81,7 @@ For developers and automated systems:
 A Soroban smart contract for time-locked distribution:
 - **`deposit(...)`** stores vesting records for multiple recipients in one call
 - Accepts a common **`unlock_time`** for the batch
+- Enforces **`MAX_BATCH_SIZE = 100`** for both deposits and batch revocations
 - Transfers total tokens from sender to the contract at deposit time
 - **`claim(...)`** lets each recipient withdraw only after unlock time
 
@@ -192,9 +193,10 @@ Batch vesting is for **time-locked payments**. Instead of transferring funds to 
 Implemented in `contracts/batch-vesting/src/lib.rs`:
 
 - `deposit(env, sender, token, recipients, amounts, unlock_time)`
+- `batch_revoke(env, caller, recipients, token, unlock_time)`
 - `claim(env, recipient, token)`
 
-`deposit` validates recipient/amount arrays, stores per-recipient vesting state, and transfers total token amount into contract custody. `claim` enforces the lock and transfers vested funds to the recipient.
+`deposit` validates recipient/amount arrays, rejects batches larger than 100 entries, stores per-recipient vesting state, and transfers total token amount into contract custody. `batch_revoke` applies the same 100-recipient limit so oversized revocation calls fail before doing per-recipient work. `claim` enforces the lock and transfers vested funds to the recipient.
 
 ---
 
@@ -209,6 +211,7 @@ Each transaction costs a small fee (about 0.00001 XLM per operation). The system
 
 ### Limits
 - Maximum 100 payments per transaction (the system automatically splits larger batches)
+- Maximum 100 vesting recipients per `deposit` or `batch_revoke` call
 - You can't undo a payment once submitted
 - You need enough money in your account for all payments plus fees
 - For vesting, recipients cannot claim before unlock time
