@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { validatePaymentInstructions } from "@/lib/stellar";
+import { safeJsonResponse } from "@/lib/safe-json";
 import { createJob } from "@/lib/job-store";
 import { processJobInBackground } from "@/lib/stellar/batch-worker";
 import type { PaymentInstruction } from "@/lib/stellar/types";
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
     void processJobInBackground(jobId, payments, network, secretKey);
 
     // Return 202 Accepted with the job ID for polling
-    return NextResponse.json(
+    return safeJsonResponse(
       {
         jobId,
         status: "queued",
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("Batch submission error:", error);
-    return NextResponse.json(
+    return safeJsonResponse(
       {
         error: error instanceof Error ? error.message : "Internal server error",
       },

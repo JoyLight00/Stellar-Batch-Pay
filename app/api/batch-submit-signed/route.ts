@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { TransactionBuilder, Horizon, Networks } from "stellar-sdk";
+import { safeJsonResponse } from "@/lib/safe-json";
 
 interface RequestBody {
     signedXdr: string;
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
 
         const result = await server.submitTransaction(transaction);
 
-        return NextResponse.json({
+        return safeJsonResponse({
             success: true,
             hash: result.hash,
             ledger: result.ledger,
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
                     .response?.data?.extras?.result_codes
                 : undefined;
 
-        return NextResponse.json(
+        return safeJsonResponse(
             {
                 success: false,
                 error:

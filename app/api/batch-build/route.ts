@@ -17,6 +17,7 @@ import {
   Memo,
   StrKey,
 } from "stellar-sdk";
+import { safeJsonResponse } from "@/lib/safe-json";
 
 import { createBatches, parseAsset } from "@/lib/stellar/batcher";
 import {
@@ -134,7 +135,7 @@ export async function POST(request: NextRequest) {
       sourceAccount.incrementSequenceNumber();
     }
 
-    return NextResponse.json({
+    return safeJsonResponse({
       xdrs,
       batchCount: batches.length,
       network,
@@ -142,12 +143,12 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Batch build error:", error);
-    return NextResponse.json(
+    return safeJsonResponse(
       {
         error:
           error instanceof Error ? error.message : "Internal server error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

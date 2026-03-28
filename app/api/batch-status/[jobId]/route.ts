@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getJob } from "@/lib/job-store";
+import { safeJsonResponse } from "@/lib/safe-json";
 
 interface RouteParams {
   params: Promise<{ jobId: string }>;
@@ -33,8 +34,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  // Return a safe, minimal response — no need to echo back the full payments array
-  return NextResponse.json({
+  // Return a safe, minimal response — no need to echo back the full payments array.
+  // Use safeJsonResponse to handle any BigInt values from Stellar SDK results.
+  return safeJsonResponse({
     jobId: job.jobId,
     status: job.status,
     totalBatches: job.totalBatches,
