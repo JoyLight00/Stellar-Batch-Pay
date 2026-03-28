@@ -176,6 +176,92 @@ fn test_revoke_by_admin() {
 }
 
 #[test]
+fn test_admin_transfer_requires_explicit_acceptance() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let pending_admin = Address::generate(&env);
+
+    client.set_admin(&admin);
+    client.propose_admin(&admin, &pending_admin);
+
+    client.toggle_pause(&admin, &true);
+    client.accept_admin(&pending_admin);
+    client.toggle_pause(&pending_admin, &false);
+}
+
+#[test]
+#[should_panic(expected = "Only admin can perform this action")]
+fn test_only_current_admin_can_propose_transfer() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let pending_admin = Address::generate(&env);
+
+    client.set_admin(&admin);
+    client.propose_admin(&attacker, &pending_admin);
+}
+
+#[test]
+#[should_panic(expected = "Only pending admin can accept transfer")]
+fn test_only_pending_admin_can_accept_transfer() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let pending_admin = Address::generate(&env);
+    let attacker = Address::generate(&env);
+
+    client.set_admin(&admin);
+    client.propose_admin(&admin, &pending_admin);
+    client.accept_admin(&attacker);
+}
+
+#[test]
+fn test_admin_can_renounce() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let pending_admin = Address::generate(&env);
+
+    client.set_admin(&admin);
+    client.propose_admin(&admin, &pending_admin);
+    client.renounce_admin(&admin);
+}
+
+#[test]
+#[should_panic(expected = "Admin must be set")]
+fn test_renounced_admin_loses_privileges() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+
+    client.set_admin(&admin);
+    client.renounce_admin(&admin);
+    client.toggle_pause(&admin, &true);
+}
+
+#[test]
 #[should_panic(expected = "Unauthorized revoke attempt")]
 fn test_revoke_unauthorized() {
     let env = Env::default();
@@ -363,6 +449,12 @@ fn test_events_emission() {
                 let evt_sender: Address = topics.get(1).unwrap().into_val(&env);
                 let evt_recipient: Address = topics.get(2).unwrap().into_val(&env);
                 let (evt_amount, evt_unlock): (i128, u64) = data.into_val(&env);
+                let (evt_sender, evt_recipient, evt_amount, evt_unlock): (
+                    Address,
+                    Address,
+                    i128,
+                    u64,
+                ) = data.into_val(&env);
                 assert_eq!(evt_sender, sender);
                 assert_eq!(evt_unlock, unlock_time);
                 if evt_recipient == recipient1 {
@@ -770,6 +862,12 @@ fn test_batch_revoke_events_emission() {
                 let evt_recipient: Address = topics.get(1).unwrap().into_val(&env);
                 let evt_sender: Address = topics.get(2).unwrap().into_val(&env);
                 let (evt_amount, evt_unlock): (i128, u64) = data.into_val(&env);
+                let (evt_recipient, evt_sender, evt_amount, evt_unlock): (
+                    Address,
+                    Address,
+                    i128,
+                    u64,
+                ) = data.into_val(&env);
                 assert_eq!(evt_sender, sender);
                 assert_eq!(evt_unlock, unlock_time);
                 if evt_recipient == recipient1 {
