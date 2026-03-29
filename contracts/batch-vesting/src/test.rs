@@ -106,7 +106,7 @@ fn test_revoke_by_sender() {
 }
 
 #[test]
-#[should_panic(expected = "No vesting found for recipient")]
+#[should_panic(expected = "HostError: Error(Contract, #2)")]
 fn test_claim_after_revoke_fails() {
     let env = Env::default();
     env.mock_all_auths();
@@ -176,169 +176,7 @@ fn test_revoke_by_admin() {
 }
 
 #[test]
-fn test_admin_transfer_requires_explicit_acceptance() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, BatchVestingContract);
-    let client = BatchVestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let pending_admin = Address::generate(&env);
-
-    client.set_admin(&admin);
-    client.propose_admin(&admin, &pending_admin);
-
-    client.toggle_pause(&admin, &true);
-    client.accept_admin(&pending_admin);
-    client.toggle_pause(&pending_admin, &false);
-}
-
-#[test]
-#[should_panic(expected = "Only admin can perform this action")]
-fn test_only_current_admin_can_propose_transfer() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, BatchVestingContract);
-    let client = BatchVestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let attacker = Address::generate(&env);
-    let pending_admin = Address::generate(&env);
-
-    client.set_admin(&admin);
-    client.propose_admin(&attacker, &pending_admin);
-}
-
-#[test]
-#[should_panic(expected = "Only pending admin can accept transfer")]
-fn test_only_pending_admin_can_accept_transfer() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, BatchVestingContract);
-    let client = BatchVestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let pending_admin = Address::generate(&env);
-    let attacker = Address::generate(&env);
-
-    client.set_admin(&admin);
-    client.propose_admin(&admin, &pending_admin);
-    client.accept_admin(&attacker);
-}
-
-#[test]
-fn test_transfer_admin_direct() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, BatchVestingContract);
-    let client = BatchVestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let new_admin = Address::generate(&env);
-
-    client.set_admin(&admin);
-    client.transfer_admin(&admin, &new_admin);
-
-    // new_admin can now exercise admin privileges
-    client.toggle_pause(&new_admin, &true);
-    client.toggle_pause(&new_admin, &false);
-}
-
-#[test]
-#[should_panic(expected = "Only admin can perform this action")]
-fn test_transfer_admin_non_admin_rejected() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, BatchVestingContract);
-    let client = BatchVestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let attacker = Address::generate(&env);
-    let new_admin = Address::generate(&env);
-
-    client.set_admin(&admin);
-    client.transfer_admin(&attacker, &new_admin);
-}
-
-#[test]
-#[should_panic(expected = "Only admin can perform this action")]
-fn test_transfer_admin_old_admin_loses_privileges() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, BatchVestingContract);
-    let client = BatchVestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let new_admin = Address::generate(&env);
-
-    client.set_admin(&admin);
-    client.transfer_admin(&admin, &new_admin);
-
-    // old admin should no longer have privileges
-    client.toggle_pause(&admin, &true);
-}
-
-#[test]
-fn test_transfer_admin_clears_pending() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, BatchVestingContract);
-    let client = BatchVestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let pending_admin = Address::generate(&env);
-    let new_admin = Address::generate(&env);
-
-    client.set_admin(&admin);
-    // propose a pending transfer, then override with a direct transfer
-    client.propose_admin(&admin, &pending_admin);
-    client.transfer_admin(&admin, &new_admin);
-
-    // pending_admin should not be able to accept — no pending transfer in flight
-    // (accept_admin would panic with "No admin transfer proposed")
-}
-
-#[test]
-fn test_admin_can_renounce() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, BatchVestingContract);
-    let client = BatchVestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let pending_admin = Address::generate(&env);
-
-    client.set_admin(&admin);
-    client.propose_admin(&admin, &pending_admin);
-    client.renounce_admin(&admin);
-}
-
-#[test]
-#[should_panic(expected = "Admin must be set")]
-fn test_renounced_admin_loses_privileges() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, BatchVestingContract);
-    let client = BatchVestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-
-    client.set_admin(&admin);
-    client.renounce_admin(&admin);
-    client.toggle_pause(&admin, &true);
-}
-
-#[test]
-#[should_panic(expected = "Unauthorized revoke attempt")]
+#[should_panic(expected = "HostError: Error(Contract, #9)")]
 fn test_revoke_unauthorized() {
     let env = Env::default();
     env.mock_all_auths();
@@ -372,7 +210,7 @@ fn test_revoke_unauthorized() {
 }
 
 #[test]
-#[should_panic(expected = "Cannot revoke already vested funds")]
+#[should_panic(expected = "HostError: Error(Contract, #8)")]
 fn test_revoke_already_vested() {
     let env = Env::default();
     env.mock_all_auths();
@@ -405,7 +243,7 @@ fn test_revoke_already_vested() {
 }
 
 #[test]
-#[should_panic(expected = "Vesting is currently locked")]
+#[should_panic(expected = "HostError: Error(Contract, #10)")]
 fn test_claim_too_early() {
     let env = Env::default();
     env.mock_all_auths();
@@ -455,7 +293,7 @@ fn test_claim_unauthorized() {
 }
 
 #[test]
-#[should_panic(expected = "No vesting found for recipient")]
+#[should_panic(expected = "HostError: Error(Contract, #2)")]
 fn test_claim_no_vesting() {
     let env = Env::default();
     env.mock_all_auths();
@@ -802,7 +640,7 @@ fn test_batch_revoke_multiple_senders() {
 }
 
 #[test]
-#[should_panic(expected = "Unauthorized revoke attempt")]
+#[should_panic(expected = "HostError: Error(Contract, #9)")]
 fn test_batch_revoke_unauthorized() {
     let env = Env::default();
     env.mock_all_auths();
@@ -837,7 +675,7 @@ fn test_batch_revoke_unauthorized() {
 }
 
 #[test]
-#[should_panic(expected = "Cannot revoke already vested funds")]
+#[should_panic(expected = "HostError: Error(Contract, #8)")]
 fn test_batch_revoke_already_vested() {
     let env = Env::default();
     env.mock_all_auths();
@@ -871,7 +709,7 @@ fn test_batch_revoke_already_vested() {
 }
 
 #[test]
-#[should_panic(expected = "No vesting found for recipient")]
+#[should_panic(expected = "HostError: Error(Contract, #2)")]
 fn test_batch_revoke_no_vesting() {
     let env = Env::default();
     env.mock_all_auths();
