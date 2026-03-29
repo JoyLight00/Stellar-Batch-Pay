@@ -222,12 +222,7 @@ impl BatchVestingContract {
         Self::set_admin_internal(&env, &admin);
     }
 
-    /// Toggle contract pause state. Only admin can toggle pause.
-    pub fn toggle_pause(env: Env, admin: Address, paused: bool) {
-        admin.require_auth();
-        let stored_admin = Self::get_admin(&env).expect("Admin must be set to toggle pause");
-        if admin != stored_admin {
-            soroban_sdk::panic_with_error!(&env, VestingError::NotAdmin);
+
     /// Propose a new admin. Only the current admin can nominate a successor.
     pub fn propose_admin(env: Env, admin: Address, new_admin: Address) {
         Self::require_current_admin(&env, &admin);
@@ -335,24 +330,27 @@ impl BatchVestingContract {
     }
 
     /// Revoke unvested schedules for multiple recipients in a single transaction.
+    /// Returns a vector of booleans where each boolean indicates if the revocation for the corresponding recipient succeeded.
     pub fn batch_revoke(
         env: Env,
         caller: Address,
         recipients: Vec<Address>,
         token: Address,
         unlock_time: u64,
-    ) {
+    ) -> Vec<bool> {
         Self::panic_if_paused(&env);
         caller.require_auth();
 
         let current_time = env.ledger().timestamp();
+        let mut results = Vec::new(&env);
 
         for i in 0..recipients.len() {
             let recipient = recipients.get(i).unwrap();
 
             let count = Self::get_count(&env, &recipient);
             if count == 0 {
-                soroban_sdk::panic_with_error!(&env, VestingError::NotFound);
+                results.push_back(false);
+                continue;
             }
 
             let mut found_idx: Option<u32> = None;
@@ -363,10 +361,10 @@ impl BatchVestingContract {
                 let vesting = Self::get_vesting(&env, &recipient, j);
                 if vesting.unlock_time == unlock_time {
                     if current_time >= vesting.unlock_time {
-                        soroban_sdk::panic_with_error!(&env, VestingError::AlreadyVested);
+                        break;
                     }
                     if !Self::is_authorized(&env, &caller, &vesting.sender) {
-                        soroban_sdk::panic_with_error!(&env, VestingError::Unauthorized);
+                        break;
                     }
                     revoked_amount = vesting.amount;
                     schedule_sender = Some(vesting.sender.clone());
@@ -376,7 +374,8 @@ impl BatchVestingContract {
             }
 
             if found_idx.is_none() {
-                soroban_sdk::panic_with_error!(&env, VestingError::NotFound);
+                results.push_back(false);
+                continue;
             }
 
             Self::remove_vesting(&env, &recipient, found_idx.unwrap());
@@ -389,7 +388,9 @@ impl BatchVestingContract {
                 (Symbol::new(&env, "VestingRevoked"), recipient, sender),
                 (revoked_amount, unlock_time),
             );
+            results.push_back(true);
         }
+        results
     }
 
     /// Return the contract version string.
