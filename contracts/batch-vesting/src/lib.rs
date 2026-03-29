@@ -188,11 +188,7 @@ impl BatchVestingContract {
             );
 
             env.events().publish(
-                (
-                    Symbol::new(&env, "VestingDeposited"),
-                    sender.clone(),
-                    recipient.clone(),
-                ),
+                (Symbol::new(&env, "VestingDeposited"), sender.clone(), recipient),
                 (amount, unlock_time),
             );
         }
@@ -311,11 +307,7 @@ impl BatchVestingContract {
         token_client.transfer(&env.current_contract_address(), &sender, &revoked_amount);
 
         env.events().publish(
-            (
-                Symbol::new(&env, "VestingRevoked"),
-                recipient.clone(),
-                sender.clone(),
-            ),
+            (Symbol::new(&env, "VestingRevoked"), recipient, sender),
             (revoked_amount, unlock_time),
         );
     }
@@ -372,11 +364,7 @@ impl BatchVestingContract {
             token_client.transfer(&env.current_contract_address(), &sender, &revoked_amount);
 
             env.events().publish(
-                (
-                    Symbol::new(&env, "VestingRevoked"),
-                    recipient.clone(),
-                    sender.clone(),
-                ),
+                (Symbol::new(&env, "VestingRevoked"), recipient, sender),
                 (revoked_amount, unlock_time),
             );
         }
@@ -436,8 +424,8 @@ impl BatchVestingContract {
         );
 
         env.events().publish(
-            (Symbol::new(&env, "VestingClaimed"), recipient.clone()),
-            amount_to_transfer,
+            (Symbol::new(&env, "VestingClaimed"), recipient),
+            (amount_to_transfer,),
         );
     }
 }

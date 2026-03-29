@@ -520,6 +520,7 @@ fn test_events_emission() {
 
     for (contract, topics, data) in deposit_events.iter() {
         if contract == contract_id && topics.len() == 3 {
+        if contract == contract_id && topics.len() == 3 {
             let topic: Symbol = topics.get(0).unwrap().into_val(&env);
             if topic == deposit_symbol {
                 let evt_sender: Address = topics.get(1).unwrap().into_val(&env);
@@ -554,10 +555,11 @@ fn test_events_emission() {
 
     for (contract, topics, data) in claim1_events.iter() {
         if contract == contract_id && topics.len() == 2 {
+        if contract == contract_id && topics.len() == 2 {
             let topic: Symbol = topics.get(0).unwrap().into_val(&env);
             if topic == claim_symbol {
                 let evt_recipient: Address = topics.get(1).unwrap().into_val(&env);
-                let evt_amount: i128 = data.into_val(&env);
+                let (evt_amount,): (i128,) = data.into_val(&env);
                 assert_eq!(evt_recipient, recipient1);
                 assert_eq!(evt_amount, 100);
                 claim1_found = true;
@@ -573,10 +575,11 @@ fn test_events_emission() {
 
     for (contract, topics, data) in claim2_events.iter() {
         if contract == contract_id && topics.len() == 2 {
+        if contract == contract_id && topics.len() == 2 {
             let topic: Symbol = topics.get(0).unwrap().into_val(&env);
             if topic == claim_symbol {
                 let evt_recipient: Address = topics.get(1).unwrap().into_val(&env);
-                let evt_amount: i128 = data.into_val(&env);
+                let (evt_amount,): (i128,) = data.into_val(&env);
                 assert_eq!(evt_recipient, recipient2);
                 assert_eq!(evt_amount, 200);
                 claim2_found = true;
@@ -926,6 +929,7 @@ fn test_batch_revoke_events_emission() {
     let mut revoke_found = 0;
 
     for (contract, topics, data) in revoke_events.iter() {
+        if contract == contract_id && topics.len() == 3 {
         if contract == contract_id && topics.len() == 3 {
             let topic: Symbol = topics.get(0).unwrap().into_val(&env);
             if topic == revoke_symbol {
