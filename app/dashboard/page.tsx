@@ -1,48 +1,17 @@
 "use client";
 
-import { ArrowUpRight, CheckCircle2, Clock, Wallet } from "lucide-react";
 import { RecentBatchesTable } from "@/components/dashboard/RecentBatchesTable";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
 import { PaymentVolumeChart } from "@/components/dashboard/PaymentVolumeChart";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { DeveloperResources } from "@/components/dashboard/developer-resources";
-
-const stats = [
-  {
-    title: "Total Payments",
-    value: "24,567",
-    change: "+12.5%",
-    icon: ArrowUpRight,
-    iconBg: "bg-teal-500/20",
-    iconColor: "text-teal-500",
-  },
-  {
-    title: "Total Amount Sent",
-    value: "$1.2M",
-    change: "+8.2%",
-    icon: Wallet,
-    iconBg: "bg-blue-500/20",
-    iconColor: "text-blue-500",
-  },
-  {
-    title: "Success Rate",
-    value: "98.7%",
-    change: "+2.1%",
-    icon: CheckCircle2,
-    iconBg: "bg-green-500/20",
-    iconColor: "text-green-500",
-  },
-  {
-    title: "Active Batches",
-    value: "12",
-    change: "Live",
-    icon: Clock,
-    iconBg: "bg-purple-500/20",
-    iconColor: "text-purple-500",
-  },
-];
+import { useFreighter } from "@/hooks/use-freighter";
+import { useDashboardMetrics } from "@/hooks/use-dashboard-metrics";
 
 export default function DashboardPage() {
+  const { publicKey } = useFreighter();
+  const { metrics, loading } = useDashboardMetrics(publicKey, "testnet"); // Assuming testnet for now
+
   return (
     <div className="space-y-8">
       {/* Header Section */}
@@ -56,7 +25,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Overview Metrics */}
-      <OverviewMetrics />
+      <OverviewMetrics metrics={metrics} loading={loading} />
 
       <div className="grid gap-8 lg:grid-cols-3">
         {/* Quick Actions Column */}

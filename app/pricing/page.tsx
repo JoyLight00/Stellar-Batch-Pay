@@ -6,6 +6,7 @@ import { PricingPlans } from "@/components/pricing/pricing-plans";
 import { CompareFeatures } from "@/components/pricing/compare-features";
 import { CostExampleSection } from "@/components/pricing/CostExampleSection";
 import { FaqSection } from "@/components/pricing/faq-section";
+import { CtaSection } from "@/components/cta/cta-section";
 
 export const metadata: Metadata = {
   title: "Pricing | Stellar Batch Pay",

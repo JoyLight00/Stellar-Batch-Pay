@@ -9,3 +9,4 @@ export { validatePaymentInstruction, validateBatchConfig, validatePaymentInstruc
 export { fetchFeeStats, getRecommendedFee, getFeeForOperations, clearFeeCache } from './fee-service';
 export type { FeeStats, FeeOptions } from './fee-service';
 export type { PaymentInstruction, Asset, StellarTransaction, PaymentResult, BatchResult, BatchConfig, PaymentValidationRow, ParsedPaymentFile } from './types';
+export { formatAmount } from './utils';
