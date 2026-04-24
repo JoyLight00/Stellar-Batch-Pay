@@ -16,8 +16,10 @@ pub struct BatchVestingContract;
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VestingData {
-    pub amount: i128,
-    pub unlock_time: u64,
+    pub total_amount: i128,
+    pub released_amount: i128,
+    pub start_time: u64,
+    pub end_time: u64,
     pub sender: Address,
     /// #194: Store the token address so claim/revoke can validate it matches
     /// the token that was originally deposited, preventing cross-token exploits.
@@ -148,7 +150,16 @@ impl BatchVestingContract {
         {
             let count = old_vestings.len();
             for i in 0..count {
-                let vesting = old_vestings.get(i).unwrap();
+                let legacy_vesting = old_vestings.get(i).unwrap();
+                // Map legacy VestingData to new structure
+                let vesting = VestingData {
+                    total_amount: legacy_vesting.amount,
+                    released_amount: 0,
+                    start_time: env.ledger().timestamp(), // Best effort for legacy
+                    end_time: legacy_vesting.unlock_time,
+                    sender: legacy_vesting.sender.clone(),
+                    token: legacy_vesting.token.clone(),
+                };
                 Self::set_vesting(env, recipient, i, &vesting);
             }
             Self::set_vesting_count(env, recipient, count);
@@ -282,7 +293,8 @@ impl BatchVestingContract {
         token: Address,
         recipients: Vec<Address>,
         amounts: Vec<i128>,
-        unlock_time: u64,
+        start_time: u64,
+        end_time: u64,
     ) {
         Self::panic_if_paused(&env);
         sender.require_auth();
@@ -293,7 +305,11 @@ impl BatchVestingContract {
 
         Self::panic_if_batch_too_large(recipients.len());
 
-        if unlock_time <= env.ledger().timestamp() {
+        if end_time <= start_time {
+            soroban_sdk::panic_with_error!(&env, VestingError::InvalidUnlockTime);
+        }
+
+        if end_time <= env.ledger().timestamp() {
             soroban_sdk::panic_with_error!(&env, VestingError::InvalidUnlockTime);
         }
 
@@ -319,8 +335,10 @@ impl BatchVestingContract {
                 &env,
                 &recipient,
                 &VestingData {
-                    amount,
-                    unlock_time,
+                    total_amount: amount,
+                    released_amount: 0,
+                    start_time,
+                    end_time,
                     sender: sender.clone(),
                     token: token.clone(), // #194: bind token to this schedule
                 },
@@ -329,7 +347,7 @@ impl BatchVestingContract {
 
             env.events().publish(
                 (Symbol::new(&env, "VestingDeposited"), sender.clone(), recipient),
-                (amount, unlock_time, token.clone()),
+                (amount, start_time, end_time, token.clone()),
             );
         }
 
@@ -428,9 +446,9 @@ impl BatchVestingContract {
 
         let vesting = Self::get_vesting(&env, &recipient, index);
         let current_time = env.ledger().timestamp();
-        let unlock_time = vesting.unlock_time;
-
-        if current_time >= unlock_time {
+        
+        // If it's already fully vested, it cannot be revoked.
+        if current_time >= vesting.end_time {
             soroban_sdk::panic_with_error!(&env, VestingError::AlreadyVested);
         }
 
@@ -440,17 +458,40 @@ impl BatchVestingContract {
 
         let token = vesting.token.clone();
 
-        let revoked_amount = vesting.amount;
+        // Calculate unvested amount to return to sender
+        let duration = (vesting.end_time - vesting.start_time) as i128;
+        let elapsed = if current_time > vesting.start_time {
+            (current_time - vesting.start_time) as i128
+        } else {
+            0
+        };
+        
+        let vested_amount = if elapsed >= duration as i128 {
+            vesting.total_amount
+        } else {
+            vesting.total_amount * elapsed / duration
+        };
+
+        let revoked_amount = vesting.total_amount - vested_amount;
         let sender = vesting.sender.clone();
+        
+        // Final vested portion for recipient if they haven't claimed it yet
+        let pending_vested = vested_amount - vesting.released_amount;
 
         Self::remove_vesting(&env, &recipient, index);
 
         let token_client = token::Client::new(&env, &token);
-        token_client.transfer(&env.current_contract_address(), &sender, &revoked_amount);
+        if revoked_amount > 0 {
+            token_client.transfer(&env.current_contract_address(), &sender, &revoked_amount);
+        }
+        
+        if pending_vested > 0 {
+            token_client.transfer(&env.current_contract_address(), &recipient, &pending_vested);
+        }
 
         env.events().publish(
             (Symbol::new(&env, "VestingRevoked"), recipient, sender),
-            (revoked_amount, unlock_time, token),
+            (revoked_amount, pending_vested, token),
         );
     }
 
@@ -512,7 +553,7 @@ impl BatchVestingContract {
 
             let vesting = Self::get_vesting(&env, recipient, index);
 
-            if current_time >= vesting.unlock_time {
+            if current_time >= vesting.end_time {
                 continue;
             }
 
@@ -521,19 +562,37 @@ impl BatchVestingContract {
             }
 
             let token = vesting.token.clone();
-
-            let revoked_amount = vesting.amount;
             let sender = vesting.sender.clone();
-            let unlock_time = vesting.unlock_time;
+
+            let duration = (vesting.end_time - vesting.start_time) as i128;
+            let elapsed = if current_time > vesting.start_time {
+                (current_time - vesting.start_time) as i128
+            } else {
+                0
+            };
+            
+            let vested_amount = if elapsed >= duration as i128 {
+                vesting.total_amount
+            } else {
+                vesting.total_amount * elapsed / duration
+            };
+
+            let revoked_amount = vesting.total_amount - vested_amount;
+            let pending_vested = vested_amount - vesting.released_amount;
 
             Self::remove_vesting(&env, recipient, index);
 
             let token_client = token::Client::new(&env, &token);
-            token_client.transfer(&env.current_contract_address(), &sender, &revoked_amount);
+            if revoked_amount > 0 {
+                token_client.transfer(&env.current_contract_address(), &sender, &revoked_amount);
+            }
+            if pending_vested > 0 {
+                token_client.transfer(&env.current_contract_address(), &recipient, &pending_vested);
+            }
 
             env.events().publish(
                 (Symbol::new(&env, "VestingRevoked"), recipient.clone(), sender),
-                (revoked_amount, unlock_time, token),
+                (revoked_amount, pending_vested, token),
             );
             results.set(pos, true);
         }
@@ -547,7 +606,7 @@ impl BatchVestingContract {
 
     /// Claim all vested (unlocked) funds for the given recipient.
     ///
-    /// All vested schedules are considered.
+    /// All vested schedules are considered and pro-rata amounts are calculated.
     pub fn claim(env: Env, recipient: Address) {
         Self::panic_if_paused(&env);
         recipient.require_auth();
@@ -558,39 +617,52 @@ impl BatchVestingContract {
         }
 
         let current_time = env.ledger().timestamp();
+        let mut claimed_something = false;
 
-        // Collect claimable indices: unlocked.
-        let mut claimable: Vec<u32> = Vec::new(&env);
-        for i in 0..count {
-            let vesting = Self::get_vesting(&env, &recipient, i);
-            if current_time >= vesting.unlock_time {
-                claimable.push_back(i);
+        // Process schedules in reverse to handle removals via swap-with-last
+        for i in (0..count).rev() {
+            let mut vesting = Self::get_vesting(&env, &recipient, i);
+            
+            if current_time <= vesting.start_time {
+                Self::extend_ttl_vesting(&env, &recipient, i);
+                continue;
+            }
+
+            let duration = (vesting.end_time - vesting.start_time) as i128;
+            let elapsed = (current_time - vesting.start_time) as i128;
+            
+            let vested_amount = if current_time >= vesting.end_time {
+                vesting.total_amount
+            } else {
+                vesting.total_amount * elapsed / duration
+            };
+
+            let claimable = vested_amount - vesting.released_amount;
+
+            if claimable > 0 {
+                let token_client = token::Client::new(&env, &vesting.token);
+                token_client.transfer(&env.current_contract_address(), &recipient, &claimable);
+
+                vesting.released_amount += claimable;
+                claimed_something = true;
+
+                if vesting.released_amount >= vesting.total_amount {
+                    Self::remove_vesting(&env, &recipient, i);
+                } else {
+                    Self::set_vesting(&env, &recipient, i, &vesting);
+                }
+
+                env.events().publish(
+                    (Symbol::new(&env, "VestingClaimed"), recipient.clone()),
+                    (claimable, vesting.token.clone()),
+                );
             } else {
                 Self::extend_ttl_vesting(&env, &recipient, i);
             }
         }
 
-        if claimable.len() == 0 {
+        if !claimed_something {
             soroban_sdk::panic_with_error!(&env, VestingError::StillLocked);
-        }
-
-        // Process claimable entries
-        let claimable_len = claimable.len();
-        for k in (0..claimable_len).rev() {
-            let idx = claimable.get(k).unwrap();
-            let current_count = Self::get_vesting_count(&env, &recipient);
-            if idx < current_count {
-                let vesting = Self::get_vesting(&env, &recipient, idx);
-                let token_client = token::Client::new(&env, &vesting.token);
-                token_client.transfer(&env.current_contract_address(), &recipient, &vesting.amount);
-
-                Self::remove_vesting(&env, &recipient, idx);
-
-                env.events().publish(
-                    (Symbol::new(&env, "VestingClaimed"), recipient.clone()),
-                    (vesting.amount, vesting.token.clone()),
-                );
-            }
         }
     }
     /// Bonus: Get paginated vesting schedules for a recipient

@@ -68,7 +68,7 @@ fn test_deposit_and_claim() {
         li.timestamp = 0;
     });
 
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
     assert_eq!(token.balance(&sender), 700);
     assert_eq!(token.balance(&contract_id), 300);
@@ -109,7 +109,7 @@ fn test_revoke_by_sender() {
         li.timestamp = 0;
     });
 
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
     env.ledger().with_mut(|li| {
         li.timestamp = 500;
@@ -145,7 +145,7 @@ fn test_claim_after_revoke_fails() {
         li.timestamp = 0;
     });
 
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
     env.ledger().with_mut(|li| {
         li.timestamp = 500;
     });
@@ -180,7 +180,7 @@ fn test_revoke_by_admin_fails() {
     env.ledger().with_mut(|li| {
         li.timestamp = 0;
     });
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
     env.ledger().with_mut(|li| {
         li.timestamp = 500;
@@ -217,7 +217,7 @@ fn test_revoke_unauthorized() {
         li.timestamp = 0;
     });
 
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
     env.ledger().with_mut(|li| {
         li.timestamp = 500;
@@ -250,7 +250,7 @@ fn test_revoke_already_vested() {
         li.timestamp = 0;
     });
 
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
     env.ledger().with_mut(|li| {
         li.timestamp = 1000;
@@ -285,7 +285,7 @@ fn test_claim_too_early() {
         li.timestamp = 0;
     });
 
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
     // Try to claim before unlock_time
     env.ledger().with_mut(|li| {
@@ -366,7 +366,7 @@ fn test_deposit_rejects_oversized_batch() {
         li.timestamp = 0;
     });
 
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 }
 
 #[test]
@@ -394,7 +394,7 @@ fn test_events_emission() {
         li.timestamp = 0;
     });
 
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
     // Verify VestingDeposited events
     let deposit_events = env.events().all();
@@ -499,6 +499,7 @@ fn test_multiple_vestings_different_unlocks() {
         &token.address,
         &recipients,
         &amounts_first,
+        &0,
         &unlock_time_first,
     );
 
@@ -509,6 +510,7 @@ fn test_multiple_vestings_different_unlocks() {
         &token.address,
         &recipients,
         &amounts_second,
+        &0,
         &unlock_time_second,
     );
 
@@ -562,7 +564,7 @@ fn test_batch_revoke_by_sender() {
         li.timestamp = 0;
     });
 
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
     assert_eq!(token.balance(&sender), 400);
     assert_eq!(token.balance(&contract_id), 600);
@@ -680,6 +682,7 @@ fn test_batch_revoke_multiple_senders_fails_for_admin() {
         &token.address,
         &Vec::from_array(&env, [recipient1.clone()]),
         &Vec::from_array(&env, [100]),
+        &0,
         &unlock_time,
     );
 
@@ -689,6 +692,7 @@ fn test_batch_revoke_multiple_senders_fails_for_admin() {
         &token.address,
         &Vec::from_array(&env, [recipient2.clone()]),
         &Vec::from_array(&env, [200]),
+        &0,
         &unlock_time,
     );
 
@@ -1312,6 +1316,7 @@ fn test_claim_multi_token() {
         &token_a.address,
         &Vec::from_array(&env, [recipient.clone()]),
         &Vec::from_array(&env, [100]),
+        &0,
         &1000,
     );
     client.deposit(
@@ -1319,6 +1324,7 @@ fn test_claim_multi_token() {
         &token_b.address,
         &Vec::from_array(&env, [recipient.clone()]),
         &Vec::from_array(&env, [200]),
+        &0,
         &1000,
     );
 
@@ -1367,6 +1373,7 @@ fn test_deposit_schedule_limit_exceeded() {
             &token.address,
             &Vec::from_array(&env, [recipient.clone()]),
             &Vec::from_array(&env, [10i128]),
+            &0,
             &unlock,
         );
     }
@@ -1377,6 +1384,7 @@ fn test_deposit_schedule_limit_exceeded() {
         &token.address,
         &Vec::from_array(&env, [recipient.clone()]),
         &Vec::from_array(&env, [10i128]),
+        &0,
         &(2000 + u64::from(MAX_SCHEDULES_PER_RECIPIENT) * 100),
     );
 }
@@ -1413,6 +1421,7 @@ fn test_batch_revoke_multiple_schedules_same_recipient() {
         &token.address,
         &Vec::from_array(&env, [recipient.clone()]),
         &Vec::from_array(&env, [100i128]),
+        &0,
         &1000u64,
     );
     client.deposit(
@@ -1420,6 +1429,7 @@ fn test_batch_revoke_multiple_schedules_same_recipient() {
         &token.address,
         &Vec::from_array(&env, [recipient.clone()]),
         &Vec::from_array(&env, [200i128]),
+        &0,
         &2000u64,
     );
     client.deposit(
@@ -1427,6 +1437,7 @@ fn test_batch_revoke_multiple_schedules_same_recipient() {
         &token.address,
         &Vec::from_array(&env, [recipient.clone()]),
         &Vec::from_array(&env, [300i128]),
+        &0,
         &3000u64,
     );
 
@@ -1497,14 +1508,18 @@ fn test_lazy_migration() {
         &env,
         [
             VestingData {
-                amount: 100,
-                unlock_time: 1000,
+                total_amount: 100,
+                released_amount: 0,
+                start_time: 0,
+                end_time: 1000,
                 sender: sender.clone(),
                 token: token.clone(),
             },
             VestingData {
-                amount: 200,
-                unlock_time: 2000,
+                total_amount: 200,
+                released_amount: 0,
+                start_time: 0,
+                end_time: 2000,
                 sender: sender.clone(),
                 token: token.clone(),
             },
@@ -1520,8 +1535,8 @@ fn test_lazy_migration() {
     // Calling get_vestings should trigger the lazy migration and return the two elements
     let vestings = client.get_vestings(&recipient, &0, &10);
     assert_eq!(vestings.len(), 2);
-    assert_eq!(vestings.get(0).unwrap().amount, 100);
-    assert_eq!(vestings.get(1).unwrap().amount, 200);
+    assert_eq!(vestings.get(0).unwrap().total_amount, 100);
+    assert_eq!(vestings.get(1).unwrap().total_amount, 200);
 
     // After migration, the old key should be deleted and the new individual entry keys exist.
     env.as_contract(&contract_id, || {
@@ -1566,6 +1581,7 @@ fn test_get_vestings_pagination() {
             &token.address,
             &Vec::from_array(&env, [recipient.clone()]),
             &Vec::from_array(&env, [10i128]),
+            &0,
             &(1000 + i * 100),
         );
     }
@@ -1628,15 +1644,13 @@ fn test_deposit_event_includes_token_address() {
 
     let recipients = Vec::from_array(&env, [recipient.clone()]);
     let amounts = Vec::from_array(&env, [100i128]);
-    let unlock_time = 1000u64;
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
-    env.ledger().with_mut(|li| li.timestamp = 0);
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
-
-    let payload: (i128, u64, Address) = find_event_data(&env, "VestingDeposited");
+    let payload: (i128, u64, u64, Address) = find_event_data(&env, "VestingDeposited");
     assert_eq!(payload.0, 100i128, "amount mismatch");
-    assert_eq!(payload.1, 1000u64, "unlock_time mismatch");
-    assert_eq!(payload.2, token.address, "token address missing from deposit event");
+    assert_eq!(payload.1, 0u64, "start_time mismatch");
+    assert_eq!(payload.2, 1000u64, "end_time mismatch");
+    assert_eq!(payload.3, token.address, "token address missing from deposit event");
 }
 
 #[test]
@@ -1655,10 +1669,7 @@ fn test_claim_event_includes_token_address() {
 
     let recipients = Vec::from_array(&env, [recipient.clone()]);
     let amounts = Vec::from_array(&env, [100i128]);
-    let unlock_time = 1000u64;
-
-    env.ledger().with_mut(|li| li.timestamp = 0);
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
     env.ledger().with_mut(|li| li.timestamp = 1001);
     client.claim(&recipient);
@@ -1684,16 +1695,68 @@ fn test_revoke_event_includes_token_address() {
 
     let recipients = Vec::from_array(&env, [recipient.clone()]);
     let amounts = Vec::from_array(&env, [100i128]);
-    let unlock_time = 1000u64;
-
-    env.ledger().with_mut(|li| li.timestamp = 0);
-    client.deposit(&sender, &token.address, &recipients, &amounts, &unlock_time);
+    client.deposit(&sender, &token.address, &recipients, &amounts, &0, &unlock_time);
 
     env.ledger().with_mut(|li| li.timestamp = 500);
     client.revoke(&sender, &recipient, &0);
 
-    let payload: (i128, u64, Address) = find_event_data(&env, "VestingRevoked");
-    assert_eq!(payload.0, 100i128, "amount mismatch");
-    assert_eq!(payload.1, 1000u64, "unlock_time mismatch");
+    let payload: (i128, i128, Address) = find_event_data(&env, "VestingRevoked");
+    assert_eq!(payload.0, 50i128, "revoked_amount mismatch");
+    assert_eq!(payload.1, 50i128, "pending_vested mismatch");
     assert_eq!(payload.2, token.address, "token address missing from revoke event");
+}
+
+#[test]
+fn test_linear_vesting_partial_claims() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, BatchVestingContract);
+    let client = BatchVestingContractClient::new(&env, &contract_id);
+
+    let sender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    let token_admin = Address::generate(&env);
+    let (token, token_admin_client) = create_token_contract(&env, &token_admin);
+    token_admin_client.mint(&sender, &1000);
+
+    let recipients = Vec::from_array(&env, [recipient.clone()]);
+    let amounts = Vec::from_array(&env, [1000]);
+    let start_time = 1000;
+    let end_time = 2000;
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = 0;
+    });
+
+    client.deposit(&sender, &token.address, &recipients, &amounts, &start_time, &end_time);
+
+    // At t=1250, 25% should be vested: 1000 * (1250-1000)/(2000-1000) = 250
+    env.ledger().with_mut(|li| {
+        li.timestamp = 1250;
+    });
+
+    client.claim(&recipient);
+    assert_eq!(token.balance(&recipient), 250);
+
+    // At t=1500, 50% should be vested total, so 250 more
+    env.ledger().with_mut(|li| {
+        li.timestamp = 1500;
+    });
+
+    client.claim(&recipient);
+    assert_eq!(token.balance(&recipient), 500);
+
+    // At t=2000, 100% should be vested, so 500 more
+    env.ledger().with_mut(|li| {
+        li.timestamp = 2000;
+    });
+
+    client.claim(&recipient);
+    assert_eq!(token.balance(&recipient), 1000);
+    
+    // Schedule should be removed
+    let vestings = client.get_vestings(&recipient, &0, &10);
+    assert_eq!(vestings.len(), 0);
 }
