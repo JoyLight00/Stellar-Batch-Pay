@@ -80,13 +80,18 @@ export async function buildDepositTransaction(
   const amounts = payments.map((p) => p.amount);
   const tokens = payments.map((p) => assetToTokenAddress(p.asset ?? 'XLM', network));
 
+  // Use current time as start_time; unlockTime is the end_time
+  const startTime = Math.floor(Date.now() / 1000);
+  const endTime = Math.max(unlockTime, startTime);
+
   const operation = contract.call(
     'deposit',
-    new Address(publicKey).toScVal(),        // sender: Address
-    addressVecToScVal(tokens),                // tokens: Vec<Address> (#210)
-    addressVecToScVal(recipients),            // recipients: Vec<Address>
-    amountVecToScVal(amounts),                // amounts: Vec<i128>
-    nativeToScVal(BigInt(unlockTime), { type: 'u64' }) // start_time: u64 (now)
+    new Address(publicKey).toScVal(),         // sender: Address
+    addressVecToScVal(tokens),                 // tokens: Vec<Address> (#210)
+    addressVecToScVal(recipients),             // recipients: Vec<Address>
+    amountVecToScVal(amounts),                 // amounts: Vec<i128>
+    nativeToScVal(BigInt(startTime), { type: 'u64' }),  // start_time: u64
+    nativeToScVal(BigInt(endTime), { type: 'u64' })     // end_time: u64
   );
 
   const tx = new TransactionBuilder(account, {
