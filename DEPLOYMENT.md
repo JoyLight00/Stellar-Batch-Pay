@@ -40,6 +40,60 @@ export NODE_ENV="production"
 vercel env add STELLAR_SECRET_KEY
 ```
 
+## Keeper Bot Secret Management (#257)
+
+The keeper bot (`scripts/keeper.ts`) reads `KEEPER_SECRET` from a pluggable
+backend configured by `SECRET_BACKEND`.
+
+### Backend: `env` (local development only)
+
+```bash
+export SECRET_BACKEND=env
+export KEEPER_SECRET="S..."   # .env or shell — never commit
+npx ts-node scripts/keeper.ts
+```
+
+A warning is printed at startup when using this backend in non-development
+environments.
+
+### Backend: `aws` (recommended for production)
+
+1. Store the keeper secret in AWS Secrets Manager:
+   ```bash
+   aws secretsmanager create-secret \
+     --name KEEPER_SECRET \
+     --secret-string '{"KEEPER_SECRET":"S..."}'
+   ```
+2. Attach an IAM policy granting `secretsmanager:GetSecretValue` to the role
+   running the keeper bot.
+3. Set environment variables:
+   ```bash
+   export SECRET_BACKEND=aws
+   export AWS_REGION=us-east-1
+   # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY or use instance/task role
+   ```
+
+### Backend: `github` (GitHub Actions CI/CD)
+
+1. Add `KEEPER_SECRET` in your repository:
+   **Settings → Secrets and variables → Actions → New repository secret**
+2. Reference in your workflow:
+   ```yaml
+   jobs:
+     keeper:
+       steps:
+         - name: Run keeper
+           env:
+             SECRET_BACKEND: github
+             KEEPER_SECRET: ${{ secrets.KEEPER_SECRET }}
+           run: npx ts-node scripts/keeper.ts
+   ```
+
+No secret is written to disk, logs, or intermediate environment files in the
+`aws` or `github` backends.
+
+---
+
 ## Smart Contract Deployment
 
 Follow these steps to deploy and initialize the Soroban smart contract.
