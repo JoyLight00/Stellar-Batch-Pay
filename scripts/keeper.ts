@@ -1,15 +1,16 @@
 // scripts/keeper.ts
-import { 
-  SorobanRpc, 
-  Networks, 
-  Keypair, 
-  TransactionBuilder, 
-  Account, 
-  Contract, 
+import {
+  SorobanRpc,
+  Networks,
+  Keypair,
+  TransactionBuilder,
+  Account,
+  Contract,
   Address,
   nativeToScVal,
   xdr
 } from 'stellar-sdk';
+import { createSecretsProvider } from '../lib/secrets/index';
 
 /**
  * CONFIGURATION
@@ -17,19 +18,22 @@ import {
 const RPC_URL = process.env.SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
 const NETWORK_PASSPHRASE = process.env.NETWORK_PASSPHRASE || Networks.TESTNET;
 const CONTRACT_ID = process.env.CONTRACT_ID;
-const KEEPER_SECRET = process.env.KEEPER_SECRET;
 const BUMP_THRESHOLD_DAYS = 7;
 
-if (!CONTRACT_ID || !KEEPER_SECRET) {
-  console.error('MISSING CONTRACT_ID or KEEPER_SECRET in environment');
+if (!CONTRACT_ID) {
+  console.error('MISSING CONTRACT_ID in environment');
   process.exit(1);
 }
 
-const server = new SorobanRpc.Server(RPC_URL);
-const keeperKeypair = Keypair.fromSecret(KEEPER_SECRET);
-const contract = new Contract(CONTRACT_ID);
-
 async function main() {
+  // Fetch the keeper secret from the configured backend (#257).
+  // Set SECRET_BACKEND=aws|github|env (default: env with a warning).
+  const secrets = await createSecretsProvider();
+  const keeperSecret = await secrets.fetchSecret('KEEPER_SECRET');
+  const keeperKeypair = Keypair.fromSecret(keeperSecret);
+  const server = new SorobanRpc.Server(RPC_URL);
+  const contract = new Contract(CONTRACT_ID!);
+
   console.log('Starting Keeper Bot...');
   console.log(`Contract: ${CONTRACT_ID}`);
   console.log(`Keeper: ${keeperKeypair.publicKey()}`);
@@ -39,13 +43,13 @@ async function main() {
     // In a production scenario, you would use an indexer or query events.
     // For this demonstration, we'll focus on the logic for a single recipient.
     const recipients = await fetchActiveRecipients();
-    
+
     for (const recipient of recipients) {
-      await maintainRecipient(recipient);
+      await maintainRecipient(recipient, server, contract, keeperKeypair);
     }
 
     // 2. Maintain contract instance
-    await maintainInstance();
+    await maintainInstance(server, contract, keeperKeypair);
 
   } catch (error) {
     console.error('Keeper execution failed:', error);
@@ -58,17 +62,21 @@ async function fetchActiveRecipients(): Promise<string[]> {
   return [];
 }
 
-async function maintainInstance() {
+async function maintainInstance(
+  server: SorobanRpc.Server,
+  contract: Contract,
+  keeperKeypair: Keypair,
+) {
   console.log('Checking contract instance TTL...');
   const sourceAccount = await server.getAccount(keeperKeypair.publicKey());
-  
-  const tx = new TransactionBuilder(new Account(sourceAccount.accountId(), sourceAccount.sequenceNumber()), {
-    fee: '100000',
-    networkPassphrase: NETWORK_PASSPHRASE
-  })
-  .addOperation(contract.call('bump_instance_ttl'))
-  .setTimeout(300)
-  .build();
+
+  const tx = new TransactionBuilder(
+    new Account(sourceAccount.accountId(), sourceAccount.sequenceNumber()),
+    { fee: '100000', networkPassphrase: NETWORK_PASSPHRASE },
+  )
+    .addOperation(contract.call('bump_instance_ttl'))
+    .setTimeout(300)
+    .build();
 
   const sim = await server.simulateTransaction(tx);
   if (SorobanRpc.Api.isSimulationError(sim)) {
@@ -78,24 +86,28 @@ async function maintainInstance() {
 
   const preparedTx = SorobanRpc.assembleTransaction(tx, sim).build();
   preparedTx.sign(keeperKeypair);
-  
+
   const result = await server.sendTransaction(preparedTx);
   console.log(`Instance TTL bumped: ${result.hash}`);
 }
 
-async function maintainRecipient(recipient: string) {
+async function maintainRecipient(
+  recipient: string,
+  server: SorobanRpc.Server,
+  contract: Contract,
+  keeperKeypair: Keypair,
+) {
   console.log(`Checking TTL for recipient: ${recipient}`);
-  
-  // Logic: Call 'maintenance' which bumps everything for this recipient
+
   const sourceAccount = await server.getAccount(keeperKeypair.publicKey());
-  
-  const tx = new TransactionBuilder(new Account(sourceAccount.accountId(), sourceAccount.sequenceNumber()), {
-    fee: '100000',
-    networkPassphrase: NETWORK_PASSPHRASE
-  })
-  .addOperation(contract.call('maintenance', new Address(recipient).toScVal()))
-  .setTimeout(300)
-  .build();
+
+  const tx = new TransactionBuilder(
+    new Account(sourceAccount.accountId(), sourceAccount.sequenceNumber()),
+    { fee: '100000', networkPassphrase: NETWORK_PASSPHRASE },
+  )
+    .addOperation(contract.call('maintenance', new Address(recipient).toScVal()))
+    .setTimeout(300)
+    .build();
 
   const sim = await server.simulateTransaction(tx);
   if (SorobanRpc.Api.isSimulationError(sim)) {
@@ -105,7 +117,7 @@ async function maintainRecipient(recipient: string) {
 
   const preparedTx = SorobanRpc.assembleTransaction(tx, sim).build();
   preparedTx.sign(keeperKeypair);
-  
+
   const result = await server.sendTransaction(preparedTx);
   console.log(`Maintenance completed for ${recipient}: ${result.hash}`);
 }

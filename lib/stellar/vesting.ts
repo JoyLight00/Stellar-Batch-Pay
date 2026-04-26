@@ -9,6 +9,7 @@ import {
   nativeToScVal,
 } from 'stellar-sdk';
 import type { PaymentInstruction } from './types';
+import { acquireGuard } from './reentrancy-guard';
 
 const SOROBAN_RPC_URLS = {
   testnet: 'https://soroban-testnet.stellar.org',
@@ -63,6 +64,9 @@ export async function buildDepositTransaction(
   network: 'testnet' | 'mainnet',
   publicKey: string
 ): Promise<string> {
+  // Reentrancy guard: reject concurrent deposit calls for the same account (#250).
+  const release = acquireGuard(publicKey, 'deposit');
+  try {
   const networkPassphrase = network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
   const rpcUrl = SOROBAN_RPC_URLS[network];
 
@@ -111,6 +115,9 @@ export async function buildDepositTransaction(
 
   // Return unsigned XDR for wallet signing
   return preparedTx.toEnvelope().toXDR('base64');
+  } finally {
+    release();
+  }
 }
 
 /**
