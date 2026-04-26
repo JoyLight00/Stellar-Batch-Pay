@@ -31,6 +31,7 @@ export interface PaymentValidationRow {
   rowNumber: number;
   instruction: PaymentInstruction;
   valid: boolean;
+  isDuplicate?: boolean;
   error?: string;
 }
 

@@ -120,9 +120,34 @@ export function validateBatchConfig(config: BatchConfig): { valid: boolean; erro
   return { valid: true };
 }
 
-export function validatePaymentInstructions(instructions: PaymentInstruction[]): { valid: boolean; errors: Map<number, string> } {
-  const errors = new Map<number, string>();
+export function findDuplicates(instructions: PaymentInstruction[]): Map<string, number[]> {
+  const addressMap = new Map<string, number[]>();
+  instructions.forEach((inst, index) => {
+    if (inst.address) {
+      const indices = addressMap.get(inst.address) || [];
+      indices.push(index);
+      addressMap.set(inst.address, indices);
+    }
+  });
 
+  const duplicates = new Map<string, number[]>();
+  for (const [address, indices] of addressMap.entries()) {
+    if (indices.length > 1) {
+      duplicates.set(address, indices);
+    }
+  }
+  return duplicates;
+}
+
+export function validatePaymentInstructions(instructions: PaymentInstruction[]): { 
+  valid: boolean; 
+  errors: Map<number, string>;
+  duplicateIndices: Set<number>;
+} {
+  const errors = new Map<number, string>();
+  const duplicateIndices = new Set<number>();
+  
+  // 1. Individual validation
   for (let i = 0; i < instructions.length; i++) {
     const result = validatePaymentInstruction(instructions[i]);
     if (!result.valid) {
@@ -130,9 +155,16 @@ export function validatePaymentInstructions(instructions: PaymentInstruction[]):
     }
   }
 
+  // 2. Duplicate detection
+  const duplicates = findDuplicates(instructions);
+  for (const indices of duplicates.values()) {
+    indices.forEach(idx => duplicateIndices.add(idx));
+  }
+
   return {
-    valid: errors.size === 0,
+    valid: errors.size === 0 && duplicateIndices.size === 0,
     errors,
+    duplicateIndices,
   };
 }
 

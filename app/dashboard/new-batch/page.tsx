@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileUpload } from "@/components/file-upload";
 import { ConnectWalletButton } from "@/components/connect-wallet-button";
+import { BatchDryRun } from "@/components/dashboard/BatchDryRun";
 import { useFreighter } from "@/hooks/use-freighter";
 import { parsePaymentFile, getBatchSummary } from "@/lib/stellar";
 import type { ParsedPaymentFile, BatchResult } from "@/lib/stellar/types";
@@ -200,7 +201,53 @@ export default function NewBatchPaymentPage() {
       )}
 
       {/* Step 2: Validation */}
-      {/* ... Keep the rest of your existing step 2, 3, 4 code unchanged ... */}
+      {step === 2 && validationResult && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-white">Validation Results</h2>
+              <p className="text-slate-400 text-sm">Review identified issues before proceeding.</p>
+            </div>
+            <div className="flex gap-3">
+              <Button 
+                variant="outline" 
+                onClick={() => setStep(1)}
+                className="border-slate-800 text-slate-300 hover:bg-slate-800"
+              >
+                Re-upload
+              </Button>
+              <Button 
+                onClick={() => setStep(3)}
+                disabled={validationResult.validPayments.length === 0}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white"
+              >
+                Proceed to Review
+              </Button>
+            </div>
+          </div>
+
+          {validationResult.invalidCount > 0 && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex gap-3 items-start">
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-red-200 font-semibold text-sm">Invalid instructions found</h3>
+                <p className="text-red-300/80 text-xs mt-1">
+                  We found {validationResult.invalidCount} rows with errors. Only valid instructions will be included in the final batch.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <BatchDryRun result={validationResult} />
+        </div>
+      )}
+
+      {/* Step 3: Review */}
+      {step === 3 && summary && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* ... existing review step content ... */}
+        </div>
+      )}
     </div>
   );
 }

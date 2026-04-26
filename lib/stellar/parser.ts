@@ -116,14 +116,25 @@ export function analyzeParsedPayments(
   instructions: PaymentInstruction[],
   rowOffset = 1,
 ): ParsedPaymentFile {
+  const addressIndices = new Map<string, number[]>();
+  instructions.forEach((inst, idx) => {
+    if (inst.address) {
+      const indices = addressIndices.get(inst.address) || [];
+      indices.push(idx);
+      addressIndices.set(inst.address, indices);
+    }
+  });
+
   const rows = instructions.map((instruction, index) => {
     const validation = validatePaymentInstruction(instruction);
+    const isDuplicate = (addressIndices.get(instruction.address)?.length || 0) > 1;
 
     return {
       rowNumber: rowOffset + index,
       instruction,
-      valid: validation.valid,
-      error: validation.error,
+      valid: validation.valid && !isDuplicate,
+      isDuplicate,
+      error: validation.error || (isDuplicate ? 'Duplicate recipient address' : undefined),
     };
   });
 
