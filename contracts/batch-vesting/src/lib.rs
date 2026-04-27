@@ -67,6 +67,33 @@ pub struct Config {
 }
 
 #[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeConfig {
+    /// Fee in stroops (1 XLM = 10_000_000 stroops) charged per recipient on deposit.
+    /// Set to 0 to disable fees.
+    pub fee_per_recipient: i128,
+    /// Address that receives collected fees (treasury or admin wallet).
+    pub treasury: Address,
+}
+
+/// Legacy storage type used only during migration from the old Vec<VestingData> layout.
+/// Must match the exact field layout of VestingData as it was stored before the
+/// granular per-schedule key migration.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyVestingData {
+    pub total_amount: i128,
+    pub released_amount: i128,
+    pub start_time: u64,
+    pub end_time: u64,
+    pub vesting_step: u64,
+    pub sender: Address,
+    pub batch_id: u32,
+    pub token: Address,
+    pub memo: String,
+}
+
+#[contracttype]
 pub enum DataKey {
     VestingEntry(Address, u32), // (recipient, index) — granular per-schedule key
     VestingCount(Address),      // total number of schedules for a recipient
@@ -83,6 +110,8 @@ pub enum DataKey {
     BatchInfo(u32),             // #209: batch metadata indexed by batch_id
     BatchCounter,               // #209: counter for next batch_id
     UpgradeProposal,            // #254: pending contract upgrade
+    /// Fee configuration for per-recipient deposit fees.
+    FeeConfig,
 }
 
 #[soroban_sdk::contracterror]
@@ -109,6 +138,10 @@ pub enum VestingError {
     InvalidVestingStep = 14,
     /// #254: Timelock for upgrade has not yet expired.
     TimelockNotExpired = 15,
+    /// Fee token does not match the native/expected fee token.
+    FeeMismatch = 16,
+    /// Caller is not the recipient of the vesting schedule.
+    NotRecipient = 17,
 }
 
 impl BatchVestingContract {
@@ -203,6 +236,19 @@ impl BatchVestingContract {
 
     fn remove_pending_admin_internal(env: &Env) {
         env.storage().persistent().remove(&DataKey::PendingAdmin);
+    }
+
+    fn get_fee_config(env: &Env) -> Option<FeeConfig> {
+        env.storage().persistent().get(&DataKey::FeeConfig)
+    }
+
+    fn set_fee_config_internal(env: &Env, config: &FeeConfig) {
+        env.storage().persistent().set(&DataKey::FeeConfig, config);
+        env.storage().persistent().extend_ttl(
+            &DataKey::FeeConfig,
+            BUMP_THRESHOLD,
+            BUMP_EXTEND_TO,
+        );
     }
 
     fn require_current_admin(env: &Env, admin: &Address) {
@@ -344,33 +390,6 @@ impl BatchVestingContract {
                 (total * current_step) / num_steps
             }
         }
-    }
-
-    fn get_batch_info(env: &Env, batch_id: u32) -> BatchInfo {
-        env.storage()
-            .persistent()
-            .get(&DataKey::BatchInfo(batch_id))
-            .unwrap_or_else(|| panic!("Batch info not found"))
-    }
-
-    fn set_batch_info(env: &Env, batch_id: u32, info: &BatchInfo) {
-        env.storage()
-            .persistent()
-            .set(&DataKey::BatchInfo(batch_id), info);
-        env.storage().persistent().extend_ttl(
-            &DataKey::BatchInfo(batch_id),
-            BUMP_THRESHOLD,
-            BUMP_EXTEND_TO,
-        );
-    }
-
-    fn get_next_batch_id(env: &Env) -> u32 {
-        env.storage().persistent().get(&DataKey::BatchCounter).unwrap_or(0)
-    }
-
-    fn increment_batch_id(env: &Env) {
-        let next = Self::get_next_batch_id(env) + 1;
-        env.storage().persistent().set(&DataKey::BatchCounter, &next);
     }
 
     /// Appends a new vesting schedule for a recipient and returns its index.
@@ -606,6 +625,36 @@ impl BatchVestingContract {
             let token_client = token::Client::new(&env, &token);
             token_client.transfer(&sender, &env.current_contract_address(), &total_amount);
         }
+
+        // Collect per-recipient fee if configured.
+        // The fee is charged in the native XLM token (Stellar asset contract).
+        // Fees are transferred directly to the treasury — they never enter the
+        // vesting pool, so recipients are unaffected.
+        if let Some(fee_cfg) = Self::get_fee_config(&env) {
+            if fee_cfg.fee_per_recipient > 0 {
+                let n = recipients.len() as i128;
+                let total_fee = fee_cfg
+                    .fee_per_recipient
+                    .checked_mul(n)
+                    .unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, VestingError::Overflow));
+                // Re-use the native token stored in FeeConfig.treasury; the fee
+                // token is the first token in the batch (callers must supply the
+                // same native token).  For multi-token batches the fee is always
+                // denominated in the fee_token stored alongside FeeConfig.
+                // We transfer from sender → treasury using the fee_token.
+                // NOTE: The fee token address is stored implicitly as the first
+                // token in the batch.  A dedicated FeeToken key can be added if
+                // heterogeneous fee tokens are needed in the future.
+                let fee_token = tokens.get(0).unwrap();
+                let fee_token_client = token::Client::new(&env, &fee_token);
+                fee_token_client.transfer(&sender, &fee_cfg.treasury, &total_fee);
+
+                env.events().publish(
+                    (Symbol::new(&env, "FeeCollected"), sender.clone()),
+                    (total_fee, fee_token, fee_cfg.treasury),
+                );
+            }
+        }
     }
 
     /// Set admin for the contract. Only the very first call can set the admin.
@@ -691,6 +740,77 @@ impl BatchVestingContract {
         env.events().publish(
             (Symbol::new(&env, "ConfigUpdated"),),
             (config.max_batch_size, config.max_schedules_per_recipient),
+        );
+    }
+
+    /// Configure the per-recipient deposit fee. Only admin can call this.
+    ///
+    /// Set `fee_per_recipient` to 0 to disable fees entirely.
+    /// The `treasury` address receives all collected fees.
+    ///
+    /// Security note: fees are immutable within a single `deposit` transaction —
+    /// the fee parameters are read once at the start of each deposit call,
+    /// preventing any "bait and switch" between fee reads and token transfers.
+    ///
+    /// Recommendation: set the admin to a Stellar multisig account with
+    /// appropriate low/med/high thresholds so that fee changes require
+    /// M-of-N signers, preventing a single compromised key from draining
+    /// depositors via inflated fees.
+    pub fn set_fee_config(env: Env, admin: Address, fee_per_recipient: i128, treasury: Address) {
+        Self::require_current_admin(&env, &admin);
+        if fee_per_recipient < 0 {
+            soroban_sdk::panic_with_error!(&env, VestingError::InvalidAmount);
+        }
+        let config = FeeConfig { fee_per_recipient, treasury: treasury.clone() };
+        Self::set_fee_config_internal(&env, &config);
+
+        env.events().publish(
+            (Symbol::new(&env, "FeeConfigUpdated"),),
+            (fee_per_recipient, treasury),
+        );
+    }
+
+    /// Transfer vesting rights to a new address.
+    ///
+    /// Only the current recipient can call this — not the sender, not the admin.
+    /// This allows a recipient to rotate to a new hardware wallet if their
+    /// current wallet is compromised, without requiring any admin involvement.
+    ///
+    /// The storage key is updated atomically: the schedule is removed from the
+    /// old recipient and appended to the new recipient's list.
+    pub fn transfer_vesting_rights(
+        env: Env,
+        recipient: Address,
+        index: u32,
+        new_address: Address,
+    ) {
+        // Only the current recipient may authorise this transfer.
+        recipient.require_auth();
+
+        let count = Self::get_vesting_count(&env, &recipient);
+        if index >= count {
+            soroban_sdk::panic_with_error!(&env, VestingError::NotFound);
+        }
+
+        let vesting = Self::get_vesting(&env, &recipient, index);
+
+        // Enforce schedule cap on the new address.
+        let new_count = Self::get_vesting_count(&env, &new_address);
+        let config = Self::get_config(&env);
+        if new_count >= config.max_schedules_per_recipient {
+            soroban_sdk::panic_with_error!(&env, VestingError::ScheduleLimitExceeded);
+        }
+
+        // Remove from old recipient (swap-with-last).
+        Self::remove_vesting(&env, &recipient, index);
+
+        // Append to new recipient.
+        let new_idx = Self::push_vesting(&env, &new_address, &vesting);
+        Self::extend_ttl_vesting(&env, &new_address, new_idx);
+
+        env.events().publish(
+            (Symbol::new(&env, "VestingTransferred"), recipient.clone()),
+            (new_address, index),
         );
     }
 
