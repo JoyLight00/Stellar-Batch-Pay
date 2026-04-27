@@ -39,5 +39,5 @@ fn test_ttl_bumping_logic() {
     // Verify it doesn't crash
     client.bump_instance_ttl();
     client.bump_vesting_ttl(&recipient, &0);
-    client.maintenance(&recipient);
+    client.maintenance(&recipient, &0, &1);
 }

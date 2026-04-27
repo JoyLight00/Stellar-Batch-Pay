@@ -1801,7 +1801,7 @@ fn test_ttl_bumping() {
     client.bump_vesting_ttl(&recipient, &0);
 
     // Test maintenance
-    client.maintenance(&recipient);
+    client.maintenance(&recipient, &0, &1);
 }
 
 #[test]
