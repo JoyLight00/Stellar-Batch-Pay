@@ -122,9 +122,72 @@ async function main() {
 }
 
 async function fetchActiveRecipients(): Promise<string[]> {
-  // TODO: Replace with real event scanning or database query
-  // For now, return an empty list or a test address
-  return [];
+  const rpc = new SorobanRpc.Server(RPC_URL);
+  const contract = new Contract(CONTRACT_ID!);
+  const recipients = new Set<string>();
+
+  try {
+    const limit = 100;
+    let cursor: string | undefined;
+    let pageCount = 0;
+    const maxPages = 10; // Prevent runaway pagination
+
+    while (pageCount < maxPages) {
+      const params: any = { limit };
+      if (cursor) params.cursor = cursor;
+
+      const events = await rpc.getEvents({
+        contractIds: [CONTRACT_ID!],
+        ...params,
+      });
+
+      if (!events.events || events.events.length === 0) {
+        break;
+      }
+
+      for (const event of events.events) {
+        if (event.type === "contract" && Array.isArray(event.contract)) {
+          const topics = event.contract;
+          const eventNameTopic = topics[0];
+
+          // Match vesting-related event names
+          if (eventNameTopic && typeof eventNameTopic === "object") {
+            const eventName = (eventNameTopic as any).sym || String(eventNameTopic);
+            if (
+              eventName.includes("vested") ||
+              eventName.includes("created") ||
+              eventName.includes("revoked")
+            ) {
+              // Extract recipient address from event data
+              const eventData = event.data;
+              if (Array.isArray(eventData) && eventData.length > 0) {
+                const recipientData = eventData[0];
+                if (recipientData && typeof recipientData === "object") {
+                  const recipientAddr = (recipientData as any).address ||
+                    (recipientData as any).recipientAddress ||
+                    String(recipientData);
+                  if (recipientAddr && recipientAddr.startsWith("G")) {
+                    recipients.add(recipientAddr);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      cursor = events.latestLedger?.toString();
+      pageCount++;
+    }
+
+    const result = Array.from(recipients);
+    console.log(`Fetched ${result.length} active recipients from contract events`);
+    return result;
+  } catch (error) {
+    console.error("Failed to fetch active recipients:", error);
+    // Fallback: return empty list so bot continues but does minimal work
+    return [];
+  }
 }
 
 async function maintainInstance(

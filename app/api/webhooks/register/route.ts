@@ -8,13 +8,13 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { url, events } = await request.json();
+    const { url, events, secret } = await request.json();
 
     if (!url || !Array.isArray(events)) {
       return safeJsonResponse({ error: "Invalid request. 'url' and 'events' (array) are required." }, { status: 400 });
     }
 
-    const webhook = registerWebhook(url, events);
+    const webhook = registerWebhook(url, events, secret);
     return safeJsonResponse({ message: "Webhook registered successfully", webhook }, { status: 201 });
   } catch (error) {
     return safeJsonResponse({ error: "Internal server error" }, { status: 500 });

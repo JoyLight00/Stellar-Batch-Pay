@@ -5,6 +5,8 @@
  *
  * Accepts { signedXdr, network } where signedXdr is the base64-encoded
  * XDR of a transaction that has already been signed by the user's wallet.
+ *
+ * On low-fee errors, returns feeEstimate and currentNetworkFee to allow retry with higher fees.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,6 +16,32 @@ import { safeJsonResponse } from "@/lib/safe-json";
 interface RequestBody {
     signedXdr: string;
     network: "testnet" | "mainnet";
+}
+
+interface FeeStats {
+    last_ledger_base_fee?: string;
+    ledger_capacity_usage?: string;
+}
+
+async function getFeeStats(server: Horizon.Server): Promise<FeeStats> {
+    try {
+        const response = await fetch(server.serverURL + "/fee_stats");
+        return await response.json();
+    } catch (error) {
+        console.error("Failed to fetch fee stats:", error);
+        return {};
+    }
+}
+
+function isInsufficientFeeError(error: unknown): boolean {
+    if (!error || typeof error !== "object") return false;
+    const horizonError = error as any;
+
+    const resultCodes = horizonError.response?.data?.extras?.result_codes;
+    if (!resultCodes) return false;
+
+    const txResult = resultCodes.transaction;
+    return txResult === "tx_insufficient_fee" || txResult === "tx_bad_seq";
 }
 
 export async function POST(request: NextRequest) {
@@ -53,13 +81,36 @@ export async function POST(request: NextRequest) {
                 : "https://horizon.stellar.org";
         const server = new Horizon.Server(serverUrl);
 
-        const result = await server.submitTransaction(transaction);
+        try {
+            const result = await server.submitTransaction(transaction);
 
-        return safeJsonResponse({
-            success: true,
-            hash: result.hash,
-            ledger: result.ledger,
-        });
+            return safeJsonResponse({
+                success: true,
+                hash: result.hash,
+                ledger: result.ledger,
+            });
+        } catch (submissionError: unknown) {
+            // Check if this is a low-fee error and provide fee guidance
+            if (isInsufficientFeeError(submissionError)) {
+                const feeStats = await getFeeStats(server);
+                const currentBaseFee = Number(feeStats.last_ledger_base_fee || "100");
+                const estimatedFee = (currentBaseFee * 300).toString(); // 300 ops is typical batch size
+
+                return safeJsonResponse(
+                    {
+                        success: false,
+                        error: "Transaction fees are insufficient for current network conditions",
+                        code: "insufficient_fee",
+                        currentNetworkFee: currentBaseFee,
+                        estimatedRequiredFee: estimatedFee,
+                        guidance: `Network base fee is ${currentBaseFee} stroops. Consider retrying with a fee of at least ${estimatedFee} stroops.`,
+                    },
+                    { status: 400 },
+                );
+            }
+
+            throw submissionError;
+        }
     } catch (error: unknown) {
         console.error("Submit signed tx error:", error);
 

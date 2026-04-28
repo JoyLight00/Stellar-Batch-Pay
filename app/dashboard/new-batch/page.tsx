@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { FileUpload } from "@/components/file-upload";
 import { ConnectWalletButton } from "@/components/connect-wallet-button";
 import { BatchDryRun } from "@/components/dashboard/BatchDryRun";
+import { CsvValidationErrors } from "@/components/csv-validation-errors";
 import { useWallet } from "@/contexts/WalletContext";
 import { parsePaymentFile, getBatchSummary } from "@/lib/stellar";
 import type { ParsedPaymentFile, BatchResult } from "@/lib/stellar/types";
@@ -279,51 +280,11 @@ export default function NewBatchPaymentPage() {
         </div>
       )}
 
-      {/* Step 4: Submit Confirmation */}
-      {step === 4 && result && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <Card className="bg-slate-900/50 border-slate-800">
-            <CardHeader>
-              <CardTitle className="text-lg text-white">Batch Submitted</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2 text-emerald-400">
-                <CheckCircle2 className="w-5 h-5" />
-                <span>Your batch has been submitted successfully.</span>
-              </div>
-              <div className="text-sm text-slate-400">
-                Job ID: <span className="font-mono text-white">{result.jobId}</span>
-              </div>
-              <div className="text-sm text-slate-400">
-                Total Payments: {result.totalPayments}
-              </div>
-              <div className="pt-4">
-                <Button
-                  onClick={() => setStep(1)}
-                  variant="outline"
-                  className="border-slate-800 text-slate-300 hover:bg-slate-800"
-                >
-                  Create New Batch
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </div>
-  );
-}
-                setResult(data);
-                setStep(4);
-                toast.success('Batch submitted successfully');
-              } catch (error) {
-                console.error('Batch submission error:', error);
-                toast.error(error instanceof Error ? error.message : 'Failed to submit batch');
-              } finally {
-                setIsSubmitting(false);
-              }
-            }}
-          />
+          {validationResult.invalidCount > 0 && (
+            <CsvValidationErrors validationResult={validationResult} maxVisibleErrors={5} />
+          )}
+
+          <BatchDryRun result={validationResult} />
         </div>
       )}
 
