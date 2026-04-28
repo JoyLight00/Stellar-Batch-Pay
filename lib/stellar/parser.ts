@@ -6,6 +6,8 @@ import Papa from 'papaparse';
 import { ParsedPaymentFile, PaymentInstruction, MemoType } from './types';
 import { validatePaymentInstruction } from './validator';
 
+export const MAX_UPLOAD_ROWS = 1000;
+
 /**
  * Sanitizes a string value to prevent CSV injection (Formula Injection)
  * and strips HTML tags to prevent XSS.
@@ -166,6 +168,9 @@ export function analyzeParsedPayments(
 
 export function parsePaymentFile(content: string, format: 'json' | 'csv'): ParsedPaymentFile {
   const instructions = parseInput(content, format);
+  if (instructions.length > MAX_UPLOAD_ROWS) {
+    throw new Error(`Upload exceeds the maximum of ${MAX_UPLOAD_ROWS} rows. Your file has ${instructions.length} rows. Please split it into smaller files.`);
+  }
   return analyzeParsedPayments(instructions, format === 'csv' ? 2 : 1);
 }
 
@@ -191,6 +196,13 @@ export function parseFileStream(
 
       for (let i = 0; i < data.length; i++) {
         const row = data[i];
+
+        if (rowCount + i >= MAX_UPLOAD_ROWS) {
+          aborted = true;
+          parser.abort();
+          callbacks.onError(new Error(`Upload exceeds the maximum of ${MAX_UPLOAD_ROWS} rows. Please split your file into smaller files.`));
+          return;
+        }
 
         const instruction: PaymentInstruction = {
           address: sanitizeValue(String(row.address || '')),
