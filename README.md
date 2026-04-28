@@ -365,6 +365,90 @@ A: Your secret key never leaves your computer/browser. All processing happens lo
 
 ---
 
+## Webhook Integration
+
+Stellar BatchPay supports outgoing webhooks to notify external systems when batch operations complete. All webhook requests include HMAC-SHA256 signatures for security.
+
+### Registering a Webhook
+
+Send a POST request to `/api/webhooks/register` with your webhook URL and the events you want to subscribe to:
+
+```bash
+curl -X POST http://localhost:3000/api/webhooks/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-system.com/webhook",
+    "events": ["batch.completed", "batch.failed"]
+  }'
+```
+
+The response will include a shared `secret` that you'll use to verify incoming webhook signatures.
+
+### Verifying Webhook Signatures
+
+All outgoing webhooks include an `x-webhook-signature` header containing an HMAC-SHA256 signature. You should verify this signature to ensure the webhook is authentically from Stellar BatchPay.
+
+**Node.js/JavaScript example:**
+```javascript
+const crypto = require('crypto');
+
+function verifyWebhook(payload, signature, secret) {
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex');
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(signature, 'hex'),
+    Buffer.from(expectedSignature, 'hex')
+  );
+}
+
+// Express.js example
+app.post('/webhook', (req, res) => {
+  const signature = req.headers['x-webhook-signature'];
+  const payload = req.body;
+  
+  if (!verifyWebhook(payload, signature, YOUR_WEBHOOK_SECRET)) {
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+  
+  console.log('Verified webhook:', payload);
+  res.json({ status: 'ok' });
+});
+```
+
+**Python example:**
+```python
+import hmac
+import hashlib
+
+def verify_webhook(payload, signature, secret):
+    expected = hmac.new(
+        secret.encode('utf-8'),
+        json.dumps(payload).encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
+```
+
+### Webhook Event Format
+
+```json
+{
+  "event": "batch.completed",
+  "payload": {
+    "batchId": "...",
+    "totalRecipients": 100,
+    "successful": 98,
+    "failed": 2
+  },
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+---
+
 ## Need Help?
 
 1. **Check the examples** in the `examples/` folder

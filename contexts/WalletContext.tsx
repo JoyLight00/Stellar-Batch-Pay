@@ -22,6 +22,8 @@ interface WalletContextType {
   sep7Uri: string | null;
   isSep7ModalOpen: boolean;
   setSep7ModalOpen: (open: boolean) => void;
+  ledger: ReturnType<typeof import("@/hooks/use-ledger").useLedger>;
+  connectLedger: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -36,6 +38,7 @@ export function WalletProvider({ children, expectedNetwork = "testnet" }: Wallet
   const [selectedNetwork, setSelectedNetwork] = useState<SorobanNetwork>(expectedNetwork);
   const [detectedNetwork, setDetectedNetwork] = useState<SorobanNetwork | null>(null);
   const [networkMismatch, setNetworkMismatch] = useState(false);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
 
   // Restore network from localStorage on mount
   useEffect(() => {
@@ -66,10 +69,23 @@ export function WalletProvider({ children, expectedNetwork = "testnet" }: Wallet
     }
   }, [wallet, selectedNetwork]);
 
+  const handleConnectLedger = useCallback(async () => {
+    try {
+      setLedgerError(null);
+      await wallet.connectLedger();
+      localStorage.setItem("wallet_network", selectedNetwork);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to connect Ledger";
+      setLedgerError(errorMsg);
+      console.error("Failed to connect Ledger:", err);
+    }
+  }, [wallet, selectedNetwork]);
+
   const handleDisconnect = useCallback(() => {
     wallet.disconnect();
     localStorage.removeItem("wallet_public_key");
     localStorage.removeItem("wallet_network");
+    setLedgerError(null);
   }, [wallet]);
 
   const handleSelectNetwork = useCallback((network: SorobanNetwork) => {
@@ -89,7 +105,7 @@ export function WalletProvider({ children, expectedNetwork = "testnet" }: Wallet
     publicKey: wallet.publicKey,
     isConnecting: wallet.isConnecting,
     isInstalled: true, // SEP-7 is always "installed"
-    error: null,
+    error: ledgerError,
     network: detectedNetwork,
     networkMismatch,
     expectedNetwork: selectedNetwork,
@@ -101,6 +117,8 @@ export function WalletProvider({ children, expectedNetwork = "testnet" }: Wallet
     sep7Uri: wallet.sep7Uri,
     isSep7ModalOpen: wallet.isSep7ModalOpen,
     setSep7ModalOpen: wallet.setSep7ModalOpen,
+    ledger: wallet.ledger,
+    connectLedger: handleConnectLedger,
   };
 
   return (

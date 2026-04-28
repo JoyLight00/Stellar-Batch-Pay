@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarRange, Download, FileText, Wallet } from "lucide-react";
+import { CalendarRange, Download, FileText, Wallet, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import {
   toClaimExportRows,
   type ClaimExportRow,
 } from "@/lib/dashboard/history-export";
+import { downloadReceipt, downloadReceiptCsv } from "@/lib/receipt-generator";
 
 function downloadCsv(filename: string, csv: string) {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -131,6 +132,24 @@ export function HistoryExportCenter() {
     toast.success("Print dialog opened for PDF export.");
   };
 
+  const handleDownloadBatchReceipt = (batch: BatchResult) => {
+    try {
+      downloadReceipt(batch);
+      toast.success("Receipt downloaded successfully.");
+    } catch (error) {
+      toast.error("Failed to generate receipt.");
+    }
+  };
+
+  const handleDownloadBatchCsv = (batch: BatchResult) => {
+    try {
+      downloadReceiptCsv(batch);
+      toast.success("CSV downloaded successfully.");
+    } catch (error) {
+      toast.error("Failed to generate CSV.");
+    }
+  };
+
   return (
     <Card className="border-[#1F2937] bg-[#121827] shadow-lg">
       <CardHeader className="space-y-3">
@@ -145,7 +164,7 @@ export function HistoryExportCenter() {
           </div>
         </div>
         <p className="text-sm text-gray-400">
-          Export claim history as CSV or PDF with date range filtering. Results default to your connected wallet history.
+          Export claim history as CSV or PDF with date range filtering. You can also download receipts for past batch transactions.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -219,6 +238,49 @@ export function HistoryExportCenter() {
         <p className="text-xs text-gray-500">
           Showing {Math.min(filteredRows.length, 8)} of {filteredRows.length} rows.
         </p>
+
+        {history.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+              <Receipt className="h-4 w-4" />
+              Recent Batch Receipts
+            </h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {history.slice(0, 10).map((batch, idx) => (
+                <div key={idx} className="flex items-center justify-between bg-[#0E1526] p-3 rounded-lg border border-[#1F2937]">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-300 font-mono truncate">
+                      {batch.totalRecipients} recipients • {batch.summary.successful} successful
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(batch.timestamp).toLocaleDateString()} • {batch.network}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 ml-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDownloadBatchReceipt(batch)}
+                      className="text-[#00D98B] hover:text-[#00D98B]/80 h-8 px-2"
+                    >
+                      <FileText className="h-3.5 w-3.5 mr-1" />
+                      Receipt
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDownloadBatchCsv(batch)}
+                      className="text-gray-400 hover:text-white h-8 px-2"
+                    >
+                      <Download className="h-3.5 w-3.5 mr-1" />
+                      CSV
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

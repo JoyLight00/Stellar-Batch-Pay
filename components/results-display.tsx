@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { BatchResult, PaymentInstruction } from '@/lib/stellar/types';
 import { Button } from '@/components/ui/button';
 import { formatAmount } from '@/lib/stellar';
+import { downloadReceipt, downloadReceiptCsv } from '@/lib/receipt-generator';
+import { FileDown, FileText } from 'lucide-react';
 
 interface TxStatusResult {
   found: boolean;
@@ -53,6 +55,27 @@ export function ResultsDisplay({ result, onRetry }: ResultsDisplayProps) {
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => downloadReceipt(result)}
+          className="gap-2"
+        >
+          <FileText className="h-4 w-4" />
+          Download Receipt (HTML)
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => downloadReceiptCsv(result)}
+          className="gap-2"
+        >
+          <FileDown className="h-4 w-4" />
+          Export CSV
+        </Button>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-card p-4 rounded-lg border border-border">
           <p className="text-muted-foreground text-sm">Successful</p>
