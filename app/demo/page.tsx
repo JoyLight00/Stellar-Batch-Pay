@@ -10,11 +10,13 @@ import { ConnectWalletButton } from "@/components/connect-wallet-button";
 import { useFreighter } from "@/hooks/use-freighter";
 import { useToast } from "@/components/ui/use-toast";
 import { parseInput, parseFileStream, validatePaymentInstructions } from "@/lib/stellar";
+import { CsvValidationErrors } from "@/components/csv-validation-errors";
 import type {
   PaymentInstruction,
   BatchResult,
   PaymentResult,
   JobStatus,
+  ParsedPaymentFile,
 } from "@/lib/stellar/types";
 import { useBatchHistory } from "@/hooks/use-batch-history";
 import { Navbar } from "@/components/landing/navbar";
@@ -29,6 +31,7 @@ export default function Home() {
   const [network, setNetwork] = useState<"testnet" | "mainnet">("testnet");
   const [result, setResult] = useState<BatchResult | null>(null);
   const [error, setError] = useState("");
+  const [validationResult, setValidationResult] = useState<ParsedPaymentFile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -312,8 +315,11 @@ export default function Home() {
               <h2 className="text-xl font-semibold mb-4">
                 Upload Payment File
               </h2>
-              <FileUpload onFileSelect={handleFileSelect} />
+              <FileUpload onFileSelect={handleFileSelect} onValidationResult={setValidationResult} />
             </div>
+            {validationResult && validationResult.invalidCount > 0 && (
+              <CsvValidationErrors validationResult={validationResult} />
+            )}
           </div>
         )}
 

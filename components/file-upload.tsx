@@ -3,15 +3,43 @@
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
+import { parsePaymentFile } from '@/lib/stellar/parser';
+import type { ParsedPaymentFile } from '@/lib/stellar/types';
 
 interface FileUploadProps {
   onFileSelect: (file: File, format: 'json' | 'csv') => void;
+  onValidationResult?: (result: ParsedPaymentFile) => void;
   disabled?: boolean;
 }
 
-export function FileUpload({ onFileSelect, disabled }: FileUploadProps) {
+export function FileUpload({ onFileSelect, onValidationResult, disabled }: FileUploadProps) {
   const [fileName, setFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const processFile = async (file: File, ext: string) => {
+    setFileName(file.name);
+    onFileSelect(file, ext as 'json' | 'csv');
+
+    if (onValidationResult) {
+      try {
+        const content = await file.text();
+        const result = parsePaymentFile(content, ext as 'json' | 'csv');
+        onValidationResult(result);
+      } catch (err) {
+        // Parsing failed — surface as a single-row error result
+        onValidationResult({
+          rows: [{
+            rowNumber: 1,
+            instruction: { address: '', amount: '', asset: '' },
+            valid: false,
+            error: err instanceof Error ? err.message : 'Failed to parse file',
+          }],
+          validPayments: [],
+          invalidCount: 1,
+        });
+      }
+    }
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -27,8 +55,7 @@ export function FileUpload({ onFileSelect, disabled }: FileUploadProps) {
       return;
     }
 
-    setFileName(file.name);
-    onFileSelect(file, ext as 'json' | 'csv');
+    processFile(file, ext as string);
   };
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -48,8 +75,7 @@ export function FileUpload({ onFileSelect, disabled }: FileUploadProps) {
       return;
     }
 
-    setFileName(file.name);
-    onFileSelect(file, ext as 'json' | 'csv');
+    processFile(file, ext as string);
   };
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
