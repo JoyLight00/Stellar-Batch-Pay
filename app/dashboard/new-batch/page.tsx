@@ -30,7 +30,35 @@ export default function NewBatchPaymentPage() {
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<BatchResult | null>(null);
+  const [skippedIndices, setSkippedIndices] = useState<number[]>([]);
+  const [convertedIndices, setConvertedIndices] = useState<number[]>([]);
   const { publicKey, signTx } = useWallet();
+
+  const handleSkipToggle = (index: number) => {
+    setSkippedIndices(prev => {
+      const next = [...prev];
+      const idx = next.indexOf(index);
+      if (idx >= 0) {
+        next.splice(idx, 1);
+      } else {
+        next.push(index);
+      }
+      return next;
+    });
+  };
+
+  const handleConvertToggle = (index: number) => {
+    setConvertedIndices(prev => {
+      const next = [...prev];
+      const idx = next.indexOf(index);
+      if (idx >= 0) {
+        next.splice(idx, 1);
+      } else {
+        next.push(index);
+      }
+      return next;
+    });
+  };
 
   // UX: Warn before closing tab during submission (#287)
   useEffect(() => {
@@ -209,33 +237,48 @@ export default function NewBatchPaymentPage() {
             </Card>
           </div>
         </div>
-      )}
+        )}
 
-      {/* Step 2: Validation */}
-      {step === 2 && validationResult && (
+      {/* Step 3: Review */}
+      {step === 3 && summary && validationResult && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-white">Validation Results</h2>
-              <p className="text-slate-400 text-sm">Review identified issues before proceeding.</p>
-            </div>
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setStep(1)}
-                className="border-slate-800 text-slate-300 hover:bg-slate-800"
-              >
-                Re-upload
-              </Button>
-              <Button
-                onClick={() => setStep(3)}
-                disabled={validationResult.validPayments.length === 0}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white"
-              >
-                Proceed to Review
-              </Button>
-            </div>
-          </div>
+          <BatchReview
+            payments={validationResult.validPayments}
+            network={selectedNetwork}
+            skippedIndices={skippedIndices}
+            convertedIndices={convertedIndices}
+            onSkipToggle={handleSkipToggle}
+            onConvertToggle={handleConvertToggle}
+            onSubmit={async (filteredPayments) => {
+              // Submit to API
+              if (!publicKey) return;
+              setIsSubmitting(true);
+              try {
+                const response = await fetch('/api/batch-submit', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    payments: filteredPayments,
+                    network: selectedNetwork,
+                  }),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                  throw new Error(data.error || 'Failed to submit batch');
+                }
+                setResult(data);
+                setStep(4);
+                toast.success('Batch submitted successfully');
+              } catch (error) {
+                console.error('Batch submission error:', error);
+                toast.error(error instanceof Error ? error.message : 'Failed to submit batch');
+              } finally {
+                setIsSubmitting(false);
+              }
+            }}
+          />
+        </div>
+      )}
 
           {validationResult.invalidCount > 0 && (
             <CsvValidationErrors validationResult={validationResult} maxVisibleErrors={5} />
@@ -245,10 +288,35 @@ export default function NewBatchPaymentPage() {
         </div>
       )}
 
-      {/* Step 3: Review */}
-      {step === 3 && summary && (
+      {/* Step 4: Submit Confirmation */}
+      {step === 4 && result && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* ... existing review step content ... */}
+          <Card className="bg-slate-900/50 border-slate-800">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">Batch Submitted</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-2 text-emerald-400">
+                <CheckCircle2 className="w-5 h-5" />
+                <span>Your batch has been submitted successfully.</span>
+              </div>
+              <div className="text-sm text-slate-400">
+                Job ID: <span className="font-mono text-white">{result.jobId}</span>
+              </div>
+              <div className="text-sm text-slate-400">
+                Total Payments: {result.totalPayments}
+              </div>
+              <div className="pt-4">
+                <Button
+                  onClick={() => setStep(1)}
+                  variant="outline"
+                  className="border-slate-800 text-slate-300 hover:bg-slate-800"
+                >
+                  Create New Batch
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>
