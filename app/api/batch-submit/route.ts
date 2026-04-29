@@ -1,6 +1,10 @@
 /**
  * API route for submitting batch payments to Stellar (async / non-blocking).
  *
+ * Supports two modes:
+ * 1. Server-side signing: Provide payments + STELLAR_SECRET_KEY env var
+ * 2. Client-side signing: Provide pre-signed transaction envelopes (XDRs)
+ *
  * Returns 202 Accepted immediately with a jobId.
  * Frontend polls /api/batch-status/:jobId for progress.
  */
@@ -14,24 +18,78 @@ import { processJobInBackground } from "@/lib/stellar/batch-worker";
 import type { PaymentInstruction } from "@/lib/stellar/types";
 
 interface RequestBody {
-  payments: PaymentInstruction[];
+  payments?: PaymentInstruction[];
   network: "testnet" | "mainnet";
+  // #300: Support for client-side signed transactions (XDR format)
+  signedTransactions?: string[];
 }
 
 export async function POST(request: NextRequest) {
   try {
+    // Parse request body
+    const body = (await request.json()) as RequestBody;
+    const { payments, signedTransactions, network } = body;
+
+    // Validate network
+    if (!["testnet", "mainnet"].includes(network)) {
+      return NextResponse.json(
+        { error: "Invalid network: must be 'testnet' or 'mainnet'" },
+        { status: 400 },
+      );
+    }
+
+    // #300: Support two submission modes:
+    // Mode 1: Client-side signed transactions (pre-signed XDRs)
+    if (signedTransactions && signedTransactions.length > 0) {
+      if (!Array.isArray(signedTransactions)) {
+        return NextResponse.json(
+          { error: "signedTransactions must be an array of XDR strings" },
+          { status: 400 },
+        );
+      }
+
+      if (signedTransactions.length > MAX_UPLOAD_ROWS) {
+        return NextResponse.json(
+          { error: `Batch exceeds the maximum of ${MAX_UPLOAD_ROWS} transactions per upload.` },
+          { status: 400 },
+        );
+      }
+
+      // Create a job for pre-signed transactions
+      // signedTransactions are passed as-is without needing a secret key
+      const jobId = createJob([], network, signedTransactions);
+      void processJobInBackground(jobId, [], network, undefined, signedTransactions);
+
+      return safeJsonResponse(
+        {
+          jobId,
+          status: "queued",
+          totalTransactions: signedTransactions.length,
+          message:
+            "Pre-signed batch queued for processing. Poll /api/batch-status/" +
+            jobId +
+            " for progress.",
+        },
+        { status: 202 },
+      );
+    }
+
+    // Mode 2: Server-side signing (legacy, requires STELLAR_SECRET_KEY)
+    if (!payments || payments.length === 0) {
+      return NextResponse.json(
+        { error: "Either 'payments' or 'signedTransactions' must be provided" },
+        { status: 400 },
+      );
+    }
+
     // Get secret key from environment
     const secretKey = process.env.STELLAR_SECRET_KEY;
     if (!secretKey) {
       return NextResponse.json(
-        { error: "STELLAR_SECRET_KEY is not configured" },
+        { error: "STELLAR_SECRET_KEY is not configured. Please use client-side signing or configure server-side signing." },
         { status: 500 },
       );
     }
-
-    // Parse request body
-    const body = (await request.json()) as RequestBody;
-    const { payments, network } = body;
 
     // Validate input
     if (!Array.isArray(payments) || payments.length === 0) {
@@ -44,13 +102,6 @@ export async function POST(request: NextRequest) {
     if (payments.length > MAX_UPLOAD_ROWS) {
       return NextResponse.json(
         { error: `Batch exceeds the maximum of ${MAX_UPLOAD_ROWS} payments per upload.` },
-        { status: 400 },
-      );
-    }
-
-    if (!["testnet", "mainnet"].includes(network)) {
-      return NextResponse.json(
-        { error: "Invalid network: must be 'testnet' or 'mainnet'" },
         { status: 400 },
       );
     }

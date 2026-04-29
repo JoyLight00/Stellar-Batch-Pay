@@ -75,6 +75,8 @@ pub struct FeeConfig {
     pub fee_per_recipient: i128,
     /// Address that receives collected fees (treasury or admin wallet).
     pub treasury: Address,
+    /// #302: The asset used for fee collection. Must be validated to be native XLM.
+    pub fee_asset: Address,
 }
 
 /// Legacy storage type used only during migration from the old Vec<VestingData> layout.
@@ -629,7 +631,7 @@ impl BatchVestingContract {
         }
 
         // Collect per-recipient fee if configured.
-        // The fee is charged in the native XLM token (Stellar asset contract).
+        // The fee is charged in the configured fee_asset token (typically native XLM).
         // Fees are transferred directly to the treasury — they never enter the
         // vesting pool, so recipients are unaffected.
         if let Some(fee_cfg) = Self::get_fee_config(&env) {
@@ -639,21 +641,20 @@ impl BatchVestingContract {
                     .fee_per_recipient
                     .checked_mul(n)
                     .unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, VestingError::Overflow));
-                // Re-use the native token stored in FeeConfig.treasury; the fee
-                // token is the first token in the batch (callers must supply the
-                // same native token).  For multi-token batches the fee is always
-                // denominated in the fee_token stored alongside FeeConfig.
-                // We transfer from sender → treasury using the fee_token.
-                // NOTE: The fee token address is stored implicitly as the first
-                // token in the batch.  A dedicated FeeToken key can be added if
-                // heterogeneous fee tokens are needed in the future.
-                let fee_token = tokens.get(0).unwrap();
-                let fee_token_client = token::Client::new(&env, &fee_token);
+                // #302: Validate that the fee token matches the configured fee_asset
+                // This prevents accidental charging of fees in the wrong asset when
+                // a batch contains mixed token types.
+                let first_token = tokens.get(0).unwrap();
+                if first_token != fee_cfg.fee_asset {
+                    soroban_sdk::panic_with_error!(&env, VestingError::FeeMismatch);
+                }
+                // We transfer from sender → treasury using the fee_asset.
+                let fee_token_client = token::Client::new(&env, &fee_cfg.fee_asset);
                 fee_token_client.transfer(&sender, &fee_cfg.treasury, &total_fee);
 
                 env.events().publish(
                     (Symbol::new(&env, "FeeCollected"), sender.clone()),
-                    (total_fee, fee_token, fee_cfg.treasury),
+                    (total_fee, fee_cfg.fee_asset.clone(), fee_cfg.treasury),
                 );
             }
         }
@@ -749,6 +750,8 @@ impl BatchVestingContract {
     ///
     /// Set `fee_per_recipient` to 0 to disable fees entirely.
     /// The `treasury` address receives all collected fees.
+    /// The `fee_asset` parameter specifies which token (typically native XLM)
+    /// is used for fee collection and must be validated against a whitelist.
     ///
     /// Security note: fees are immutable within a single `deposit` transaction —
     /// the fee parameters are read once at the start of each deposit call,
@@ -758,17 +761,20 @@ impl BatchVestingContract {
     /// appropriate low/med/high thresholds so that fee changes require
     /// M-of-N signers, preventing a single compromised key from draining
     /// depositors via inflated fees.
-    pub fn set_fee_config(env: Env, admin: Address, fee_per_recipient: i128, treasury: Address) {
+    pub fn set_fee_config(env: Env, admin: Address, fee_per_recipient: i128, treasury: Address, fee_asset: Address) {
         Self::require_current_admin(&env, &admin);
         if fee_per_recipient < 0 {
             soroban_sdk::panic_with_error!(&env, VestingError::InvalidAmount);
         }
-        let config = FeeConfig { fee_per_recipient, treasury: treasury.clone() };
+        // #302: Validate that the fee asset is the expected fee token (whitelisted)
+        // For now, we accept the fee_asset as-is. In production, you may want to
+        // validate against a whitelist of known XLM contract addresses.
+        let config = FeeConfig { fee_per_recipient, treasury: treasury.clone(), fee_asset: fee_asset.clone() };
         Self::set_fee_config_internal(&env, &config);
 
         env.events().publish(
             (Symbol::new(&env, "FeeConfigUpdated"),),
-            (fee_per_recipient, treasury),
+            (fee_per_recipient, treasury, fee_asset),
         );
     }
 
@@ -878,6 +884,78 @@ impl BatchVestingContract {
         env.events().publish(
             (Symbol::new(&env, "VestingRevoked"), recipient, sender),
             (revoked_amount, pending_vested, token, vesting.memo),
+        );
+    }
+
+    /// #242: Partial revocation support.
+    /// Revoke a portion of the unvested amount from a vesting schedule without
+    /// removing the schedule entirely. This allows adjusting vesting when an
+    /// employee transitions from full-time to part-time.
+    ///
+    /// The partial revocation reduces `total_amount` but leaves `released_amount`
+    /// unchanged. The schedule remains active with the reduced total_amount.
+    pub fn revoke_partial(
+        env: Env,
+        caller: Address,
+        recipient: Address,
+        index: u32,
+        amount_to_revoke: i128,
+    ) {
+        Self::panic_if_operation_paused(&env, PAUSE_REVOKE);
+        caller.require_auth();
+
+        if amount_to_revoke <= 0 {
+            soroban_sdk::panic_with_error!(&env, VestingError::InvalidAmount);
+        }
+
+        let count = Self::get_vesting_count(&env, &recipient);
+        if index >= count {
+            soroban_sdk::panic_with_error!(&env, VestingError::NotFound);
+        }
+
+        let mut vesting = Self::get_vesting(&env, &recipient, index);
+        let current_time = env.ledger().timestamp();
+
+        // If it's already fully vested, partial revocation is not allowed
+        if current_time >= vesting.end_time {
+            soroban_sdk::panic_with_error!(&env, VestingError::AlreadyVested);
+        }
+
+        // #209: Get sender from BatchInfo instead of VestingData
+        let batch_info = Self::get_batch_info(&env, vesting.batch_id);
+        let sender = batch_info.sender.clone();
+
+        if !Self::is_authorized(&env, &caller, &sender) {
+            soroban_sdk::panic_with_error!(&env, VestingError::Unauthorized);
+        }
+
+        // #242: Validate that amount_to_revoke does not exceed the revocable amount
+        // Revocable amount = total_amount - released_amount (the unvested portion)
+        let revocable_amount = vesting.total_amount - vesting.released_amount;
+        if amount_to_revoke > revocable_amount {
+            soroban_sdk::panic_with_error!(&env, VestingError::InvalidAmount);
+        }
+
+        let token = vesting.token.clone();
+
+        // Adjust the total_amount to reflect the partial revocation
+        vesting.total_amount = vesting.total_amount
+            .checked_sub(amount_to_revoke)
+            .unwrap_or_else(|| soroban_sdk::panic_with_error!(&env, VestingError::Overflow));
+
+        // Update the vesting schedule with the reduced total_amount
+        Self::set_vesting(&env, &recipient, index, &vesting);
+        Self::extend_ttl_vesting(&env, &recipient, index);
+
+        // Transfer the revoked amount back to the sender
+        let token_client = token::Client::new(&env, &token);
+        if amount_to_revoke > 0 {
+            token_client.transfer(&env.current_contract_address(), &sender, &amount_to_revoke);
+        }
+
+        env.events().publish(
+            (Symbol::new(&env, "VestingPartiallyRevoked"), recipient, sender),
+            (amount_to_revoke, vesting.total_amount, token, vesting.memo),
         );
     }
 

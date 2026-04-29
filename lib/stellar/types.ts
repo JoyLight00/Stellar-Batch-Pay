@@ -11,6 +11,8 @@ export interface JobState {
   completedBatches: number;
   payments: PaymentInstruction[];
   network: "testnet" | "mainnet";
+  // #300: Support for pre-signed transactions (client-side signing)
+  signedTransactions?: string[];
   result?: BatchResult;
   error?: string;
   createdAt: string;
