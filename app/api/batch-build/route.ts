@@ -28,6 +28,7 @@ import {
 } from "@/lib/stellar/validator";
 import type { PaymentInstruction } from "@/lib/stellar/types";
 import { getRecommendedFee } from "@/lib/stellar/fee-service";
+import { MAX_UPLOAD_ROWS } from "@/lib/stellar/parser";
 
 interface RequestBody {
   payments: PaymentInstruction[];
@@ -60,6 +61,13 @@ export async function POST(request: NextRequest) {
     if (!Array.isArray(payments) || payments.length === 0) {
       return NextResponse.json(
         { error: "payments must be a non-empty array" },
+        { status: 400 }
+      );
+    }
+
+    if (payments.length > MAX_UPLOAD_ROWS) {
+      return NextResponse.json(
+        { error: `Batch exceeds the maximum of ${MAX_UPLOAD_ROWS} payments per upload.` },
         { status: 400 }
       );
     }

@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileUpload } from "@/components/file-upload";
 import { ConnectWalletButton } from "@/components/connect-wallet-button";
 import { BatchDryRun } from "@/components/dashboard/BatchDryRun";
 import { CsvValidationErrors } from "@/components/csv-validation-errors";
+import { JobProgress } from "@/components/job-progress";
 import { useWallet } from "@/contexts/WalletContext";
 import { parsePaymentFile, getBatchSummary } from "@/lib/stellar";
-import type { ParsedPaymentFile, BatchResult } from "@/lib/stellar/types";
+import type { ParsedPaymentFile, BatchResult, JobStatus } from "@/lib/stellar/types";
 import { Send, Info, Lightbulb, Check, AlertCircle, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -30,6 +31,47 @@ export default function NewBatchPaymentPage() {
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<BatchResult | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState<JobStatus>("queued");
+  const [completedBatches, setCompletedBatches] = useState(0);
+  const [totalBatches, setTotalBatches] = useState(0);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback((id: string) => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/batch-status/${id}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setJobStatus(data.status);
+        setCompletedBatches(data.completedBatches ?? 0);
+        setTotalBatches(data.totalBatches ?? 0);
+        if (data.status === "completed") {
+          stopPolling();
+          setResult(data.result ?? null);
+          setIsSubmitting(false);
+          setStep(4);
+          toast.success("Batch submitted successfully");
+        } else if (data.status === "failed") {
+          stopPolling();
+          setIsSubmitting(false);
+          toast.error(data.error ?? "Batch processing failed");
+        }
+      } catch {
+        // ignore transient fetch errors
+      }
+    }, 2000);
+  }, [stopPolling]);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
   const [skippedIndices, setSkippedIndices] = useState<number[]>([]);
   const [convertedIndices, setConvertedIndices] = useState<number[]>([]);
   const { publicKey, signTx } = useWallet();
@@ -266,14 +308,15 @@ export default function NewBatchPaymentPage() {
                 if (!response.ok) {
                   throw new Error(data.error || 'Failed to submit batch');
                 }
-                setResult(data);
-                setStep(4);
-                toast.success('Batch submitted successfully');
+                setJobId(data.jobId);
+                setJobStatus("queued");
+                setCompletedBatches(0);
+                setTotalBatches(0);
+                startPolling(data.jobId);
               } catch (error) {
                 console.error('Batch submission error:', error);
-                toast.error(error instanceof Error ? error.message : 'Failed to submit batch');
-              } finally {
                 setIsSubmitting(false);
+                toast.error(error instanceof Error ? error.message : 'Failed to submit batch');
               }
             }}
           />
@@ -285,6 +328,25 @@ export default function NewBatchPaymentPage() {
           )}
 
           <BatchDryRun result={validationResult} />
+        </div>
+      )}
+
+      {/* Processing progress — shown while batch job is running */}
+      {isSubmitting && jobId && (
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <Card className="bg-slate-900/50 border-slate-800">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">Processing Batch</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <JobProgress
+                status={jobStatus}
+                completedBatches={completedBatches}
+                totalBatches={totalBatches}
+                totalPayments={validationResult?.validPayments.length ?? 0}
+              />
+            </CardContent>
+          </Card>
         </div>
       )}
 
