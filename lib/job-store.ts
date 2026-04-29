@@ -24,10 +24,12 @@ function evictOldestIfNeeded(): void {
 
 /**
  * Create a new job and return its ID.
+ * #300: Supports both payment-based (server-side signed) and pre-signed transaction modes.
  */
 export function createJob(
   payments: PaymentInstruction[],
   network: "testnet" | "mainnet",
+  signedTransactions?: string[],
 ): string {
   evictOldestIfNeeded();
 
@@ -37,12 +39,14 @@ export function createJob(
   const job: JobState = {
     jobId,
     status: "queued",
-    totalBatches: 0, // will be updated by the worker once batches are computed
+    totalBatches: signedTransactions?.length ?? 0, // For signed txs, each XDR is one batch
     completedBatches: 0,
     payments,
     network,
     createdAt: now,
     updatedAt: now,
+    // #300: Store pre-signed transactions if provided
+    signedTransactions,
   };
 
   jobStore.set(jobId, job);

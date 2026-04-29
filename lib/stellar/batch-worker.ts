@@ -9,17 +9,19 @@ import { StellarService } from "./server";
 import { updateJob } from "../job-store";
 import { createBatches } from "./batcher";
 import type { PaymentInstruction, BatchResult, PaymentResult } from "./types";
-import { Horizon } from "stellar-sdk";
+import { Horizon, TransactionBuilder } from "stellar-sdk";
 
 /**
  * Process a batch job in the background. This function must NOT be awaited
  * by the caller — it runs asynchronously and updates job state via the store.
+ * #300: Supports both server-side signing (via secretKey) and client-side signing (via signedTransactions).
  */
 export async function processJobInBackground(
   jobId: string,
   payments: PaymentInstruction[],
   network: "testnet" | "mainnet",
-  secretKey: string,
+  secretKey?: string,
+  signedTransactions?: string[],
 ): Promise<void> {
   const MAX_OPS = 100;
 
@@ -29,6 +31,68 @@ export async function processJobInBackground(
       ? 'https://horizon-testnet.stellar.org'
       : 'https://horizon.stellar.org';
     const server = new Horizon.Server(serverUrl);
+
+    // #300: Handle pre-signed transactions (client-side signing)
+    if (signedTransactions && signedTransactions.length > 0) {
+      updateJob(jobId, {
+        status: "processing",
+        totalBatches: signedTransactions.length,
+        completedBatches: 0,
+      });
+
+      const allResults: PaymentResult[] = [];
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < signedTransactions.length; i++) {
+        try {
+          const xdr = signedTransactions[i];
+          // Submit the pre-signed transaction
+          const tx = TransactionBuilder.fromXDR(xdr, network === 'testnet' ? 'TESTNET' : 'PUBLIC');
+          const result = await server.submitTransaction(tx);
+
+          successCount++;
+          allResults.push({
+            recipient: `tx-${i}`,
+            amount: "0", // Pre-signed txs may contain multiple operations
+            asset: "XLM",
+            status: "success",
+            transactionHash: result.hash,
+          });
+        } catch (error) {
+          failCount++;
+          allResults.push({
+            recipient: `tx-${i}`,
+            amount: "0",
+            asset: "XLM",
+            status: "failed",
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+
+        updateJob(jobId, { completedBatches: i + 1 });
+      }
+
+      updateJob(jobId, {
+        status: "completed",
+        result: {
+          batchId: `batch-${Date.now()}`,
+          totalRecipients: signedTransactions.length,
+          totalAmount: "0",
+          totalTransactions: signedTransactions.length,
+          results: allResults,
+          summary: { successful: successCount, failed: failCount },
+          timestamp: new Date().toISOString(),
+          network,
+        },
+      });
+      return;
+    }
+
+    // Standard payment-based flow (server-side signing)
+    if (!secretKey) {
+      throw new Error("secretKey is required for payment-based submissions");
+    }
 
     // Compute batches up-front so we know totalBatches immediately
     const batches = await createBatches(payments, MAX_OPS, { network, server });
