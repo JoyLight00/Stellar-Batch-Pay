@@ -26,6 +26,7 @@ import {
   validateBatchConfig,
 } from "./validator";
 import { getRecommendedFee } from "./fee-service";
+import { isBadSequenceError } from "./submit-errors";
 import Big from "big.js";
 import { parseStellarAmount, formatStellarAmount, parseAsset } from "./utils";
 export { parseAsset };
@@ -65,7 +66,7 @@ export class StellarService {
 
     try {
       // Load source account
-      const sourceAccount = await this.server.loadAccount(
+      let sourceAccount = await this.server.loadAccount(
         this.keypair.publicKey(),
       );
 
@@ -162,6 +163,7 @@ export class StellarService {
           const transaction = builder.setTimeout(300).build();
           transaction.sign(this.keypair);
           const result = await this.server.submitTransaction(transaction);
+          sourceAccount.incrementSequenceNumber();
 
           txCount++;
 
@@ -178,6 +180,10 @@ export class StellarService {
           }
         } catch (error) {
           // Mark batch results as failed if transaction fails
+          if (isBadSequenceError(error)) {
+            sourceAccount = await this.server.loadAccount(this.keypair.publicKey());
+          }
+
           for (const result of results) {
             if (result.status === "failed") {
               result.error =

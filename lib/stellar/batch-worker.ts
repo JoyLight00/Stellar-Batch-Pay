@@ -116,7 +116,7 @@ export async function processJobInBackground(
       }
 
       updateJob(jobId, {
-        status: "completed",
+        status: successCount > 0 ? "completed" : "failed",
         result: {
           batchId: `batch-${Date.now()}`,
           totalRecipients: payments.length > 0 ? payments.length : xdrs.length,

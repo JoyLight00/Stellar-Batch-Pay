@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
-import { StrKey } from "stellar-sdk";
+import { Keypair, StrKey } from "stellar-sdk";
 import { validatePaymentInstructions } from "@/lib/stellar";
 import { MAX_UPLOAD_ROWS } from "@/lib/stellar/parser";
 import { safeJsonResponse } from "@/lib/safe-json";
@@ -157,6 +157,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "STELLAR_SECRET_KEY is not configured. Please configure server-side signing or use client-side signing." },
         { status: 500 },
+      );
+    }
+
+    const signingPublicKey = Keypair.fromSecret(secretKey).publicKey();
+    if (signingPublicKey !== publicKey) {
+      return NextResponse.json(
+        {
+          error:
+            "Server-side signing is bound to the configured STELLAR_SECRET_KEY and must match the request publicKey.",
+        },
+        { status: 403 },
       );
     }
 
