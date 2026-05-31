@@ -4,7 +4,6 @@
 
 import {
   Account,
-  Asset as StellarAsset,
   Memo,
   Networks,
   Operation,
@@ -14,8 +13,9 @@ import {
 } from 'stellar-sdk';
 import Big from 'big.js';
 
-import { PaymentInstruction, Asset } from './types';
+import { PaymentInstruction } from './types';
 import { getRecommendedFee } from './fee-service';
+import { parseAsset } from './utils';
 
 export interface Batch {
   transactionIndex: number;
@@ -63,11 +63,7 @@ export async function simulateBatchTransactionSize(
     }).addMemo(Memo.text('batch-size-check'));
 
     for (const payment of payments) {
-      const asset = parseAsset(payment.asset);
-      const stellarAsset =
-        asset.issuer === null
-          ? StellarAsset.native()
-          : new StellarAsset(asset.code, asset.issuer);
+      const stellarAsset = parseAsset(payment.asset);
 
       builder = builder.addOperation(
         Operation.payment({
@@ -118,11 +114,7 @@ export function estimateBatchTransactionSize(
   }).addMemo(Memo.text('batch-size-check'));
 
   for (const payment of payments) {
-    const asset = parseAsset(payment.asset);
-    const stellarAsset =
-      asset.issuer === null
-        ? StellarAsset.native()
-        : new StellarAsset(asset.code, asset.issuer);
+    const stellarAsset = parseAsset(payment.asset);
 
     builder = builder.addOperation(
       Operation.payment({
@@ -217,23 +209,6 @@ export async function createBatches(
   return batches;
 }
 
-/**
- * Parse asset string to code and issuer
- */
-export function parseAsset(assetString: string): Asset {
-  if (assetString === 'XLM') {
-    return {
-      code: 'XLM',
-      issuer: null,
-    };
-  }
-
-  const [code, issuer] = assetString.split(':');
-  return {
-    code,
-    issuer,
-  };
-}
 
 import { validatePaymentInstruction } from './validator';
 
